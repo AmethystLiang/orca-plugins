@@ -1,0 +1,49 @@
+{
+  "$schema": "https://raw.githubusercontent.com/stablyai/orca/main/docs/schemas/plugins/orca-catalog.v2.schema.json",
+  "catalogVersion": 2,
+  "name": "aamonnaig4 Orca plugins",
+  "owner": "aamonnaig4",
+  "plugins": [
+    {
+      "id": "aamonnaig4.oled-pair",
+      "source": {
+        "kind": "git",
+        "url": "https://github.com/aamonnaig4/orca-plugins.git",
+        "ref": "main",
+        "path": "plugins/oled-pair"
+      },
+      "description": "True black and true white themes with matching terminal colors.",
+      "categories": [
+        "themes"
+      ],
+      "releases": [
+        {
+          "version": "1.0.0",
+          "commit": "45023b0c61894355a3df7284df79b1be1d2c352a",
+          "contentHash": "e89301eeff4f9abbf939ff2e7e9e40ffa4b5737f15902de9193ddad770db0752",
+          "execution": "data",
+          "minimumOrca": "1.4.246",
+          "name": "OLED Pair",
+          "contributes": [
+            {
+              "kind": "themes",
+              "name": "OLED Dark"
+            },
+            {
+              "kind": "themes",
+              "name": "OLED Light"
+            },
+            {
+              "kind": "terminalThemes",
+              "name": "OLED Dark"
+            },
+            {
+              "kind": "terminalThemes",
+              "name": "OLED Light"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
