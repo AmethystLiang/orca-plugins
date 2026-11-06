@@ -1,0 +1,6 @@
+Listed by owning process:
+   pid 975(caffeinate): [0x00000039000181bd] 45:28:16 PreventUserIdleSystemSleep named: "caffeinate command-line tool"  
+	Details: caffeinate asserting forever
+	Localized=THE CAFFEINATE TOOL IS PREVENTING SLEEP.
+   pid 975(caffeinate): [0x0000003a00058237] 45:28:16 PreventUserIdleDisplaySleep named: "caffeinate command-line tool"  
+	Details: caffeinate asserting forever

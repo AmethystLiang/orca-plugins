@@ -1,0 +1,55 @@
+{
+  "manifestVersion": 2,
+  "id": "activity-monitor",
+  "name": "Activity Monitor",
+  "version": "1.0.0",
+  "execution": "trusted-worker",
+  "description": "Live CPU cores, memory, network, disk, GPU and processes in Orca's sidebar, with a health strip that warns before your computer locks up.",
+  "license": "MIT",
+  "repository": "https://github.com/aamonnaig4/orca-plugins",
+  "engines": {
+    "orca": ">=1.4.248"
+  },
+  "pluginApi": 1,
+  "main": "src/worker.ts",
+  "contributes": {
+    "panels": [
+      {
+        "id": "activity-monitor",
+        "title": "Activity Monitor",
+        "icon": "activity",
+        "entry": "panel/index.html"
+      }
+    ],
+    "statusBarItems": [
+      {
+        "id": "health",
+        "text": "Critical",
+        "icon": "warning",
+        "tone": "danger",
+        "tooltip": "Activity Monitor: memory is critical; your computer may lock up"
+      }
+    ]
+  },
+  "capabilities": [
+    {
+      "kind": "notifications:show"
+    },
+    {
+      "kind": "agent:read"
+    },
+    {
+      "kind": "terminal:send"
+    }
+  ],
+  "cover": {
+    "path": "media/cover.png",
+    "alt": "Activity Monitor with live CPU, memory, network, disk and GPU graphs, and a red Critical strip offering to quit Google Chrome"
+  },
+  "screenshots": [
+    {
+      "path": "media/screens.png",
+      "alt": "The All tab with a large CPU chart and tiles, the CPU tab with a graph per core, and the Processes tab sorted by CPU"
+    }
+  ]
+}

@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Design options: health word scale</title>
+<style>
+:root {
+  --app-bg: #000000;
+  --app-fg: #e6e6e6;
+  --app-muted: #a3a3a3;
+  --app-border: #1f1f1f;
+  --app-track: #141414;
+  --app-ok: #4ade80;
+  --app-busy: #a3e635;
+  --app-warn: #fbbf24;
+  --app-crit: #f87171;
+  --app-radius: 0px;
+  --app-font: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --app-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+
+  --doc-bg: #f1efe9;
+  --doc-fg: #2b2a27;
+  --doc-muted: #8a877f;
+  --doc-pick: #16a34a;
+  --doc-font: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --doc-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --doc-surface: #ffffff;
+  --doc-line: #0002;
+  --doc-shadow: #0001;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --doc-bg: #161513;
+    --doc-fg: #e9e6df;
+    --doc-muted: #8f8b82;
+    --doc-pick: #22c55e;
+    --doc-surface: #211f1c;
+    --doc-line: #fff2;
+    --doc-shadow: #0006;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; padding: 24px 24px 220px; background: var(--doc-bg); color: var(--doc-fg); font: 14px/1.4 var(--doc-font); }
+header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 20px; }
+header h1 { font-size: 20px; margin: 0; }
+.round { font: 600 11px var(--doc-mono); background: var(--doc-fg); color: var(--doc-bg); padding: 3px 8px; border-radius: 99px; }
+.ledger { margin: 0 0 24px; padding: 10px 14px; border-left: 3px solid var(--doc-pick); background: var(--doc-surface); font-size: 13px; }
+.ledger div::before { content: "\2713  "; color: var(--doc-pick); font-weight: 700; }
+.issue { margin: 0 0 40px; }
+.issue h2 { font-size: 16px; margin: 0 0 4px; }
+.issue h2 .num { font-family: var(--doc-mono); color: var(--doc-muted); margin-right: 6px; }
+.said { color: var(--doc-muted); font-size: 12px; margin: 0 0 10px; }
+.said::before { content: "you: "; font-weight: 600; }
+.view { font-size: 12px; margin: 6px 0 0; color: var(--doc-muted); }
+.view::before { content: "my view: "; font-weight: 600; }
+.row { display: flex; gap: 16px; overflow-x: auto; padding: 6px 4px 10px; }
+.col { flex: 0 0 auto; position: relative; border-radius: 12px; padding: 8px; outline: 2px solid transparent; transition: outline-color .12s; }
+.col[data-opt] { cursor: pointer; }
+.col[data-opt]:hover { outline-color: var(--doc-line); }
+.col.picked { outline: 3px solid var(--doc-pick); background: color-mix(in srgb, var(--doc-pick) 8%, transparent); }
+.tick { display: none; position: absolute; top: -8px; right: -8px; width: 24px; height: 24px; border-radius: 50%; background: var(--doc-pick); color: #fff; font: 700 14px/24px var(--doc-font); text-align: center; }
+.col.picked .tick { display: block; }
+.cap { margin-top: 8px; font-size: 13px; max-width: 360px; }
+.cap .pick { font: 700 12px var(--doc-mono); background: var(--doc-fg); color: var(--doc-bg); padding: 1px 6px; border-radius: 4px; margin-right: 6px; }
+.cap .cost { display: block; color: var(--doc-muted); font-size: 12px; }
+.now .cap .pick { background: var(--doc-muted); }
+.screen { background: var(--app-bg); color: var(--app-fg); font-family: var(--app-font); border: 1px solid var(--app-border); border-radius: var(--app-radius); overflow: hidden; box-shadow: 0 6px 24px var(--doc-shadow); }
+.phone { width: 393px; min-height: 600px; border-radius: 44px; border: 10px solid #111; }
+textarea.notes { display: block; width: 100%; max-width: 760px; min-height: 40px; margin-top: 6px; padding: 8px; font: 13px var(--doc-font); border: 1px solid var(--doc-line); border-radius: 6px; background: var(--doc-surface); color: var(--doc-fg); resize: vertical; }
+details.archive { margin: 40px 0; color: var(--doc-muted); }
+#manual { margin-top: 48px; padding: 16px; background: var(--doc-surface); border: 1px dashed var(--doc-line); border-radius: 10px; max-width: 760px; }
+#manual h3 { margin: 0 0 8px; font-size: 14px; }
+#manual textarea { width: 100%; min-height: 90px; font: 13px var(--doc-mono); padding: 8px; border: 1px solid var(--doc-line); border-radius: 6px; background: var(--doc-bg); color: var(--doc-fg); }
+#legend { font: 12px var(--doc-mono); color: var(--doc-muted); margin: 10px 0 0; white-space: pre-wrap; user-select: all; }
+#bar { position: fixed; left: 0; right: 0; bottom: 0; background: #1c1b19f2; color: #eee; padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; font-size: 12px; z-index: 10; }
+#bar .grp { display: flex; gap: 4px; align-items: center; }
+#bar .grp b { font-family: var(--doc-mono); color: #aaa; margin-right: 2px; }
+#bar button { font: 600 12px var(--doc-mono); border: 1px solid #555; background: #2a2926; color: #ddd; padding: 3px 8px; border-radius: 5px; cursor: pointer; }
+#bar button.on { background: var(--doc-pick); border-color: var(--doc-pick); color: #fff; }
+#bar .actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+#bar input#line { width: 260px; font: 12px var(--doc-mono); background: #000; color: #fff; border: 1px solid #555; border-radius: 5px; padding: 4px 6px; }
+#bar #copy { background: #fff; color: #111; border-color: #fff; }
+#count { font-family: var(--doc-mono); color: #aaa; }
+#toast { color: #8f8; min-width: 60px; }
+.sim { margin-left: auto; display: flex; gap: 4px; align-items: center; font: 12px var(--doc-mono); color: var(--doc-muted); }
+.sim button { font: 600 12px var(--doc-mono); border: 1px solid var(--doc-line); background: var(--doc-surface); color: var(--doc-fg); padding: 3px 8px; border-radius: 5px; cursor: pointer; }
+.sim button.on { background: var(--doc-fg); color: var(--doc-bg); }
+.screen { font-size: 12px; }
+.bar { --c: var(--app-ok); width: 420px; height: 36px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border-top: 1px solid var(--app-border); white-space: nowrap; }
+.hs { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; overflow: hidden; margin-right: 6px; }
+.ctl { display: flex; align-items: center; gap: 6px; color: var(--app-muted); flex: none; }
+.stp { border: 1px solid var(--app-border); border-radius: 6px; padding: 2px 6px; font: 11px var(--app-mono); }
+.ib { width: 20px; text-align: center; font-size: 10px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c); flex: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 25%, transparent); }
+.mm { display: flex; align-items: center; gap: 4px; flex: 1; min-width: 0; }
+.mm em { font: 10px var(--app-mono); color: var(--app-muted); font-style: normal; }
+.meter { flex: 1; height: 5px; border-radius: 3px; background: var(--app-track); overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--c); }
+.word { font-weight: 600; font-size: 13px; color: var(--c); flex: none; min-width: 64px; transition: color .3s; }
+.pips { display: flex; gap: 3px; flex: none; }
+.pips i { width: 14px; height: 6px; border-radius: 2px; background: var(--app-track); transition: background .3s; }
+.grad { position: relative; flex: 1; max-width: 140px; height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--app-ok), var(--app-ok) 35%, var(--app-busy) 55%, var(--app-warn) 75%, var(--app-crit)); opacity: .9; }
+.mk { position: absolute; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: var(--app-fg); border: 2px solid var(--app-bg); transition: left .6s cubic-bezier(.2,.8,.2,1); }
+.ladder { gap: 4px; }
+.lw { font-size: 11px; color: #3a3a3a; padding: 1px 5px; border-radius: 4px; transition: all .3s; }
+.lw.on { color: var(--app-bg); background: var(--c); font-weight: 600; }
+.uw { display: inline-flex; flex-direction: column; gap: 3px; }
+.ul { height: 2px; width: 100%; background: var(--app-track); border-radius: 1px; overflow: hidden; }
+.ulf { display: block; height: 100%; background: var(--c); transition: width .6s; }
+.words { width: 420px; padding: 12px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.w { font-weight: 600; font-size: 13px; }
+.w.g { color: var(--app-ok); } .w.y { color: var(--app-busy); } .w.a { color: var(--app-warn); } .w.r { color: var(--app-crit); }
+.st3 { --c: var(--app-warn); }
+.p3 i:nth-child(-n+4) { background: var(--app-warn); }
+.mut { color: var(--app-muted); }
+.cut { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.changed { margin: 0 0 28px; padding: 10px 14px; border-left: 3px solid #d97706; background: var(--doc-surface); font-size: 13px; max-width: 760px; }
+.changed h3 { margin: 0 0 6px; font-size: 13px; }
+.stack { display: flex; flex-direction: column; gap: 6px; }
+.pips[data-p="0"] i:nth-child(-n+1), .pips[data-p="1"] i:nth-child(-n+2), .pips[data-p="2"] i:nth-child(-n+3), .pips[data-p="3"] i:nth-child(-n+4), .pips[data-p="4"] i { background: var(--c); }
+.bar.crit { background: color-mix(in srgb, var(--app-crit) 14%, var(--app-bg)); }
+.hq { flex: none; margin-left: auto; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 5px; background: var(--app-crit); color: #fff; }
+.tipwrap { position: relative; overflow: visible; }
+.tip { position: absolute; left: 60px; top: -26px; background: #1a1a1a; color: var(--app-fg); border: 1px solid #333; border-radius: 6px; padding: 3px 8px; font-size: 11px; opacity: 0; transition: opacity .15s; pointer-events: none; }
+.tipwrap:hover .tip { opacity: 1; }
+</style>
+</head>
+<body data-key="design-options:am-scale:r3">
+
+<header>
+  <span class="round">ROUND 3</span>
+  <h1>Word + pips, every state</h1>
+</header>
+
+<div class="ledger">
+  <div>1A — word + five pips</div>
+  <div>2B — five steps</div>
+  <div>3C — cause on hover only</div>
+</div>
+
+<div class="changed">
+  <h3>What composition changed</h3>
+  <div><b>2B bent:</b> its middle word was "Fine"; you asked for "Healthy" last round, so drawn as Healthy (4).</div>
+  <div>1A × 2B: one pip per word, so pips count the step exactly.</div>
+  <div>3C × risk: the cause hides, but the toast and notification still say it.</div>
+  <div>Busy is CPU only, so it never raises a toast or a notification.</div>
+</div>
+
+<section class="issue" data-issue="4" data-keep="drawn">
+  <h2><span class="num">4</span>Middle word: Healthy or Fine?</h2>
+  <div class="row">
+    <div class="col">
+      <div class="stack">
+        <div class="screen bar" style="--c:var(--app-ok)"><div class="hs"><b class="word">Idle</b><span class="pips" data-p="0"><i></i><i></i><i></i><i></i><i></i></span></div><div class="ctl"><span class="stp">− 2000ms +</span><span class="ib">❚❚</span><span class="ib">⚙</span></div></div>
+        <div class="screen bar" style="--c:var(--app-ok)"><div class="hs"><b class="word">Healthy</b><span class="pips" data-p="1"><i></i><i></i><i></i><i></i><i></i></span></div><div class="ctl"><span class="stp">− 2000ms +</span><span class="ib">❚❚</span><span class="ib">⚙</span></div></div>
+        <div class="screen bar" style="--c:var(--app-busy)"><div class="hs"><b class="word">Busy</b><span class="pips" data-p="2"><i></i><i></i><i></i><i></i><i></i></span></div><div class="ctl"><span class="stp">− 2000ms +</span><span class="ib">❚❚</span><span class="ib">⚙</span></div></div>
+        <div class="screen bar tipwrap" style="--c:var(--app-warn)"><div class="hs"><b class="word">Strained</b><span class="pips" data-p="3"><i></i><i></i><i></i><i></i><i></i></span></div><div class="ctl"><span class="stp">− 2000ms +</span><span class="ib">❚❚</span><span class="ib">⚙</span></div><div class="tip">swap +0.4 GB/min</div></div>
+        <div class="screen bar crit" style="--c:var(--app-crit)"><div class="hs"><b class="word">Lock-up risk</b><span class="pips" data-p="4"><i></i><i></i><i></i><i></i><i></i></span><a class="hq">Quit Chrome</a></div><div class="ctl"><span class="stp">− 2000ms +</span><span class="ib">❚❚</span><span class="ib">⚙</span></div></div>
+      </div>
+      <div class="cap"><span class="pick">4A</span>Idle · Healthy · Busy · …<span class="cost">keeps your "Healthy"</span></div>
+    </div>
+    <div class="col">
+      <div class="stack">
+        <div class="screen bar" style="--c:var(--app-ok)"><div class="hs"><b class="word">Idle</b><span class="pips" data-p="0"><i></i><i></i><i></i><i></i><i></i></span></div><div class="ctl"><span class="stp">− 2000ms +</span><span class="ib">❚❚</span><span class="ib">⚙</span></div></div>
+        <div class="screen bar" style="--c:var(--app-ok)"><div class="hs"><b class="word">Fine</b><span class="pips" data-p="1"><i></i><i></i><i></i><i></i><i></i></span></div><div class="ctl"><span class="stp">− 2000ms +</span><span class="ib">❚❚</span><span class="ib">⚙</span></div></div>
+        <div class="screen bar" style="--c:var(--app-busy)"><div class="hs"><b class="word">Busy</b><span class="pips" data-p="2"><i></i><i></i><i></i><i></i><i></i></span></div><div class="ctl"><span class="stp">− 2000ms +</span><span class="ib">❚❚</span><span class="ib">⚙</span></div></div>
+        <div class="screen bar tipwrap" style="--c:var(--app-warn)"><div class="hs"><b class="word">Strained</b><span class="pips" data-p="3"><i></i><i></i><i></i><i></i><i></i></span></div><div class="ctl"><span class="stp">− 2000ms +</span><span class="ib">❚❚</span><span class="ib">⚙</span></div><div class="tip">swap +0.4 GB/min</div></div>
+        <div class="screen bar crit" style="--c:var(--app-crit)"><div class="hs"><b class="word">Lock-up risk</b><span class="pips" data-p="4"><i></i><i></i><i></i><i></i><i></i></span><a class="hq">Quit Chrome</a></div><div class="ctl"><span class="stp">− 2000ms +</span><span class="ib">❚❚</span><span class="ib">⚙</span></div></div>
+      </div>
+      <div class="cap"><span class="pick">4B</span>Idle · Fine · Busy · …<span class="cost">2B exactly as drawn</span></div>
+    </div>
+  </div>
+  <p class="view">hover Strained to see the cause</p>
+</section>
+
+<section class="issue" data-issue="5" data-keep="drawn">
+  <h2><span class="num">5</span>Does the whole strip look right?</h2>
+  <div class="row">
+    <div class="col">
+      <div class="screen bar" style="--c:var(--app-ok)"><div class="hs"><b class="word">Healthy</b><span class="pips" data-p="1"><i></i><i></i><i></i><i></i><i></i></span></div><div class="ctl"><span class="stp">− 2000ms +</span><span class="ib">❚❚</span><span class="ib">⚙</span></div></div>
+      <div class="cap"><span class="pick">5A</span>Looks right<span class="cost">settles it</span></div>
+    </div>
+    <div class="col">
+      <div class="screen bar" style="display:grid;place-items:center;color:var(--app-muted)">your fix in the note</div>
+      <div class="cap"><span class="pick">5B</span>Right, with a fix<span class="cost">say what in notes</span></div>
+    </div>
+  </div>
+</section>
+
+<details class="archive">
+  <summary>Earlier rounds</summary>
+  <p>R1: 1 scale drawing (A pips, B gradient marker, C word ladder, D underline). 2 words (A three, B five, C room-left). 3 cause (A after scale, B replaces scale, C hover). R2: you said "this should show healthy" → 2A; added 1E word alone. Final paste: 1A 2B 3C.</p>
+</details>
+
+<section id="manual">
+  <h3>Manual copy</h3>
+  <textarea id="answer" readonly placeholder="Click options above. Your answer appears here."></textarea>
+  <div id="legend"></div>
+</section>
+
+<div id="bar">
+  <div id="groups" style="display:flex;flex-wrap:wrap;gap:10px 18px"></div>
+  <div class="actions">
+    <span id="count"></span>
+    <input id="line" readonly aria-label="Answer line">
+    <button id="copy">Copy my picks</button>
+    <button id="clear">Clear</button>
+    <span id="toast"></span>
+  </div>
+</div>
+
+<script>
+(function () {
+  var KEY = document.body.dataset.key || location.pathname;
+  var state = { picks: {}, notes: {} };
+  try {
+    var saved = JSON.parse(localStorage.getItem(KEY) || "{}");
+    state.picks = saved.picks || {};
+    state.notes = saved.notes || {};
+  } catch (e) {}
+
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+  function issueOf(code) { var m = /^(\d+)/.exec(code); return m ? m[1] : code; }
+
+  var issues = [];
+  var options = {};
+  var labels = {};
+  var cards = {};
+
+  document.querySelectorAll(".issue").forEach(function (sec) {
+    var id = sec.dataset.issue;
+    var title = sec.querySelector("h2");
+    labels[id] = title ? title.textContent.replace(/^\s*\d+\s*/, "").trim() : id;
+    issues.push(id);
+    options[id] = [];
+
+    sec.querySelectorAll(".col").forEach(function (col) {
+      var chip = col.querySelector(".cap .pick");
+      if (!chip) return;
+      var code = chip.textContent.trim();
+      if (!/^\d+[A-Za-z]/.test(code)) return;
+      var name = (chip.nextSibling && chip.nextSibling.textContent || "").trim();
+      col.dataset.opt = code;
+      var tick = document.createElement("span");
+      tick.className = "tick";
+      tick.textContent = "✓";
+      col.appendChild(tick);
+      col.addEventListener("click", function (ev) {
+        if (ev.target.closest("textarea, input, a, select")) return;
+        choose(code);
+      });
+      cards[code] = col;
+      options[id].push({ code: code, name: name });
+    });
+
+    if (sec.dataset.keep !== "drawn") options[id].push({ code: id + "-keep", name: "keep as-is" });
+
+    var ta = document.createElement("textarea");
+    ta.className = "notes";
+    ta.dataset.issue = id;
+    ta.placeholder = "Notes on " + id + ": what's off, or what would make it the one";
+    ta.value = state.notes[id] || "";
+    ta.addEventListener("input", function () {
+      if (ta.value.trim()) state.notes[id] = ta.value; else delete state.notes[id];
+      save();
+      render();
+    });
+    sec.appendChild(ta);
+  });
+
+  var groups = document.getElementById("groups");
+  issues.forEach(function (id) {
+    var g = document.createElement("div");
+    g.className = "grp";
+    var b = document.createElement("b");
+    b.textContent = id;
+    g.appendChild(b);
+    options[id].forEach(function (o) {
+      var btn = document.createElement("button");
+      btn.dataset.code = o.code;
+      btn.title = o.name;
+      btn.textContent = /-keep$/.test(o.code) ? "keep" : o.code.slice(id.length);
+      btn.addEventListener("click", function () {
+        choose(o.code);
+        if (cards[o.code]) cards[o.code].scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+      });
+      g.appendChild(btn);
+    });
+    groups.appendChild(g);
+  });
+
+  document.getElementById("legend").textContent = issues.map(function (id) {
+    return id + "  " + labels[id] + "\n" + options[id].map(function (o) {
+      return "    " + o.code + "  " + o.name;
+    }).join("\n");
+  }).join("\n");
+
+  function choose(code) {
+    var id = issueOf(code);
+    if (state.picks[id] === code) delete state.picks[id]; else state.picks[id] = code;
+    save();
+    render();
+  }
+
+  function answerLine() {
+    return issues.filter(function (id) { return state.picks[id]; })
+      .map(function (id) { return state.picks[id]; }).join("  ");
+  }
+
+  function fullAnswer() {
+    var out = answerLine();
+    var notes = issues.filter(function (id) { return state.notes[id] && state.notes[id].trim(); })
+      .map(function (id) { return id + " (" + labels[id] + "): " + state.notes[id].trim().replace(/\s*\n\s*/g, " / "); });
+    if (notes.length) out += "\n\n" + notes.join("\n");
+    return out;
+  }
+
+  function render() {
+    Object.keys(cards).forEach(function (code) {
+      cards[code].classList.toggle("picked", state.picks[issueOf(code)] === code);
+    });
+    document.querySelectorAll("#groups button").forEach(function (btn) {
+      btn.classList.toggle("on", state.picks[issueOf(btn.dataset.code)] === btn.dataset.code);
+    });
+    var n = issues.filter(function (id) { return state.picks[id]; }).length;
+    document.getElementById("count").textContent = n + " / " + issues.length;
+    document.getElementById("line").value = answerLine();
+    document.getElementById("answer").value = fullAnswer();
+  }
+
+  function flash(msg) {
+    var t = document.getElementById("toast");
+    t.textContent = msg;
+    setTimeout(function () { t.textContent = ""; }, 2500);
+  }
+
+  function fallbackCopy() {
+    var ta = document.getElementById("answer");
+    ta.focus();
+    ta.select();
+    var ok = false;
+    try { ok = document.execCommand("copy"); } catch (e) {}
+    if (ok) flash("copied");
+    else { ta.scrollIntoView({ block: "center" }); flash("press ⌘C"); }
+  }
+
+  document.getElementById("copy").addEventListener("click", function () {
+    var text = fullAnswer();
+    if (!text) { flash("nothing picked"); return; }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { flash("copied"); }, fallbackCopy);
+    } else fallbackCopy();
+  });
+
+  document.getElementById("clear").addEventListener("click", function () {
+    state = { picks: {}, notes: {} };
+    document.querySelectorAll("textarea.notes").forEach(function (ta) { ta.value = ""; });
+    save();
+    render();
+  });
+
+  ["line", "answer"].forEach(function (id) {
+    document.getElementById(id).addEventListener("focus", function (ev) { ev.target.select(); });
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

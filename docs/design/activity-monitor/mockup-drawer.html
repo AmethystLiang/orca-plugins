@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Design options: culprits drawer</title>
+<style>
+:root {
+  --app-bg: #000000;
+  --app-fg: #e6e6e6;
+  --app-muted: #a3a3a3;
+  --app-border: #1f1f1f;
+  --app-track: #141414;
+  --app-accent: #1a1a1a;
+  --app-warn: #fbbf24;
+  --app-crit: #f87171;
+  --app-radius: 0px;
+  --app-font: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --app-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+
+  --doc-bg: #f1efe9;
+  --doc-fg: #2b2a27;
+  --doc-muted: #8a877f;
+  --doc-pick: #16a34a;
+  --doc-font: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --doc-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --doc-surface: #ffffff;
+  --doc-line: #0002;
+  --doc-shadow: #0001;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --doc-bg: #161513;
+    --doc-fg: #e9e6df;
+    --doc-muted: #8f8b82;
+    --doc-pick: #22c55e;
+    --doc-surface: #211f1c;
+    --doc-line: #fff2;
+    --doc-shadow: #0006;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; padding: 24px 24px 220px; background: var(--doc-bg); color: var(--doc-fg); font: 14px/1.4 var(--doc-font); }
+header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 20px; }
+header h1 { font-size: 20px; margin: 0; }
+.round { font: 600 11px var(--doc-mono); background: var(--doc-fg); color: var(--doc-bg); padding: 3px 8px; border-radius: 99px; }
+.ledger { margin: 0 0 24px; padding: 10px 14px; border-left: 3px solid var(--doc-pick); background: var(--doc-surface); font-size: 13px; }
+.ledger div::before { content: "\2713  "; color: var(--doc-pick); font-weight: 700; }
+.issue { margin: 0 0 40px; }
+.issue h2 { font-size: 16px; margin: 0 0 4px; }
+.issue h2 .num { font-family: var(--doc-mono); color: var(--doc-muted); margin-right: 6px; }
+.said { color: var(--doc-muted); font-size: 12px; margin: 0 0 10px; }
+.said::before { content: "you: "; font-weight: 600; }
+.view { font-size: 12px; margin: 6px 0 0; color: var(--doc-muted); }
+.view::before { content: "my view: "; font-weight: 600; }
+.row { display: flex; gap: 16px; overflow-x: auto; padding: 6px 4px 10px; }
+.col { flex: 0 0 auto; position: relative; border-radius: 12px; padding: 8px; outline: 2px solid transparent; transition: outline-color .12s; }
+.col[data-opt] { cursor: pointer; }
+.col[data-opt]:hover { outline-color: var(--doc-line); }
+.col.picked { outline: 3px solid var(--doc-pick); background: color-mix(in srgb, var(--doc-pick) 8%, transparent); }
+.tick { display: none; position: absolute; top: -8px; right: -8px; width: 24px; height: 24px; border-radius: 50%; background: var(--doc-pick); color: #fff; font: 700 14px/24px var(--doc-font); text-align: center; }
+.col.picked .tick { display: block; }
+.cap { margin-top: 8px; font-size: 13px; max-width: 360px; }
+.cap .pick { font: 700 12px var(--doc-mono); background: var(--doc-fg); color: var(--doc-bg); padding: 1px 6px; border-radius: 4px; margin-right: 6px; }
+.cap .cost { display: block; color: var(--doc-muted); font-size: 12px; }
+.now .cap .pick { background: var(--doc-muted); }
+.screen { background: var(--app-bg); color: var(--app-fg); font-family: var(--app-font); border: 1px solid var(--app-border); border-radius: var(--app-radius); overflow: hidden; box-shadow: 0 6px 24px var(--doc-shadow); }
+.phone { width: 393px; min-height: 600px; border-radius: 44px; border: 10px solid #111; }
+textarea.notes { display: block; width: 100%; max-width: 760px; min-height: 40px; margin-top: 6px; padding: 8px; font: 13px var(--doc-font); border: 1px solid var(--doc-line); border-radius: 6px; background: var(--doc-surface); color: var(--doc-fg); resize: vertical; }
+details.archive { margin: 40px 0; color: var(--doc-muted); }
+#manual { margin-top: 48px; padding: 16px; background: var(--doc-surface); border: 1px dashed var(--doc-line); border-radius: 10px; max-width: 760px; }
+#manual h3 { margin: 0 0 8px; font-size: 14px; }
+#manual textarea { width: 100%; min-height: 90px; font: 13px var(--doc-mono); padding: 8px; border: 1px solid var(--doc-line); border-radius: 6px; background: var(--doc-bg); color: var(--doc-fg); }
+#legend { font: 12px var(--doc-mono); color: var(--doc-muted); margin: 10px 0 0; white-space: pre-wrap; user-select: all; }
+#bar { position: fixed; left: 0; right: 0; bottom: 0; background: #1c1b19f2; color: #eee; padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; font-size: 12px; z-index: 10; }
+#bar .grp { display: flex; gap: 4px; align-items: center; }
+#bar .grp b { font-family: var(--doc-mono); color: #aaa; margin-right: 2px; }
+#bar button { font: 600 12px var(--doc-mono); border: 1px solid #555; background: #2a2926; color: #ddd; padding: 3px 8px; border-radius: 5px; cursor: pointer; }
+#bar button.on { background: var(--doc-pick); border-color: var(--doc-pick); color: #fff; }
+#bar .actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+#bar input#line { width: 260px; font: 12px var(--doc-mono); background: #000; color: #fff; border: 1px solid #555; border-radius: 5px; padding: 4px 6px; }
+#bar #copy { background: #fff; color: #111; border-color: #fff; }
+#count { font-family: var(--doc-mono); color: #aaa; }
+#toast { color: #8f8; min-width: 60px; }
+.diag { margin: 0 0 24px; padding: 10px 14px; border-left: 3px solid #d97706; background: var(--doc-surface); font-size: 13px; max-width: 760px; }
+.diag h3 { margin: 0 0 4px; font-size: 13px; }
+.diag code { font-family: var(--doc-mono); font-size: 12px; }
+.screen { font-size: 12px; }
+.pane { --c: var(--app-warn); position: relative; width: 420px; height: 360px; display: flex; flex-direction: column; }
+.content { flex: 1; min-height: 0; overflow: hidden; padding: 6px 10px; }
+.content .r { display: grid; grid-template-columns: 44px 1fr 50px 50px; height: 22px; align-items: center; color: var(--app-fg); }
+.content .r span:nth-child(1) { color: var(--app-muted); text-align: right; padding-right: 8px; }
+.content .r span:nth-child(3), .content .r span:nth-child(4) { text-align: right; color: var(--app-muted); }
+.foot { flex: none; position: relative; }
+.bar { height: 36px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-top: 1px solid var(--app-border); background: var(--app-bg); position: relative; z-index: 2; cursor: default; }
+.bar b { color: var(--c); font-weight: 600; font-size: 13px; }
+.pips { display: flex; gap: 3px; }
+.pips i { width: 14px; height: 6px; border-radius: 2px; background: var(--app-track); }
+.pips i.on { background: var(--c); }
+.stp { margin-left: auto; border: 1px solid var(--app-border); border-radius: 6px; padding: 2px 6px; font: 11px var(--app-mono); color: var(--app-muted); }
+.ib { color: var(--app-muted); font-size: 10px; width: 18px; text-align: center; }
+.drawer { background: var(--app-bg); overflow: hidden; }
+.dh { display: flex; gap: 8px; align-items: baseline; padding: 8px 12px 4px; white-space: nowrap; }
+.dh b { color: var(--c); font-weight: 600; }
+.ds { font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--app-muted); padding: 4px 12px; }
+.dr { display: grid; grid-template-columns: 1fr auto 78px; gap: 8px; align-items: center; padding: 3px 12px; min-height: 26px; }
+.dr:hover { background: var(--app-accent); }
+.dr em { font-style: normal; color: var(--app-muted); font-size: 11px; }
+.dr .v { color: var(--app-muted); text-align: right; }
+.dr .q { white-space: nowrap; justify-self: end; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 5px; border: 1px solid var(--app-border); }
+.dr .q:hover { background: var(--app-crit); border-color: var(--app-crit); color: #fff; }
+.dr .no { justify-self: end; color: var(--app-muted); }
+.m-now .drawer { position: absolute; left: 8px; width: 300px; bottom: 42px; border: 1px solid var(--app-border); border-radius: 8px; box-shadow: 0 8px 28px #000a; display: none; padding-bottom: 6px; }
+.m-now .foot:hover .drawer { display: block; }
+.m-a .drawer, .m-c .drawer { position: absolute; left: 0; right: 0; bottom: 36px; max-height: 0; transition: max-height .22s cubic-bezier(.2,.8,.2,1); z-index: 1; }
+.m-a .drawer { border-top: 1px solid transparent; }
+.m-a.open .drawer, .m-c.open .drawer { max-height: 260px; border-top-color: var(--app-border); box-shadow: 0 -10px 24px #000c; }
+.m-a.open .bar { border-top-color: transparent; }
+.m-b .drawer { max-height: 0; transition: max-height .22s cubic-bezier(.2,.8,.2,1); }
+.m-b.open .drawer { max-height: 260px; border-top: 1px solid var(--app-border); }
+.m-b.open .bar { border-top-color: transparent; }
+.m-c .drawer { left: 6px; right: 6px; border-radius: 12px 12px 0 0; background: #0c0c0c; }
+.m-c.open .drawer { border: 1px solid var(--app-border); border-bottom: 0; }
+.grab { display: block; width: 32px; height: 4px; border-radius: 2px; background: #333; margin: 6px auto 0; }
+.pin { margin-left: 4px; font-size: 10px; color: var(--app-muted); border: 1px solid var(--app-border); border-radius: 4px; padding: 0 4px; display: none; }
+.t-pin.pinned .pin { display: inline; }
+.states { display: grid; grid-template-columns: 420px 420px; gap: 14px 16px; }
+.lbl { font: 600 11px var(--doc-mono); color: var(--doc-muted); margin: 0 0 4px; }
+.chev { color: var(--app-muted); font-size: 10px; margin-left: -4px; }
+.dr .q.force { background: var(--app-crit); border-color: var(--app-crit); color: #fff; }
+.dr .busy { justify-self: end; color: var(--app-muted); font-size: 11px; }
+</style>
+</head>
+<body data-key="design-options:am-drawer:r2">
+
+<header>
+  <span class="round">ROUND 2</span>
+  <h1>Click-to-open drawer, every state</h1>
+</header>
+
+<div class="ledger">
+  <div>1A — footer grows up over the list</div>
+  <div>2B — click to open, click to close</div>
+</div>
+
+<div class="diag">
+  <h3>What composition changed</h3>
+  <div>Click also closes on Esc, a click outside, or switching tab.</div>
+  <div>The word gets a small chevron so it reads as clickable.</div>
+  <div>"Strained · plenty of headroom" becomes "Strained · easing off" (bug fix).</div>
+</div>
+
+<section class="issue" data-issue="3" data-keep="drawn">
+  <h2><span class="num">3</span>Does the drawer look right?</h2>
+  <div class="row">
+    <div class="col">
+      <div class="states">
+        <div><div class="lbl">Closed</div><div class="screen pane m-a st-closed"><div class="content"></div><div class="foot"><div class="drawer"></div><div class="bar"></div></div></div></div>
+        <div><div class="lbl">Open (click it)</div><div class="screen pane m-a t-click open"><div class="content"></div><div class="foot"><div class="drawer"></div><div class="bar"></div></div></div></div>
+        <div><div class="lbl">Quitting, then Force quit</div><div class="screen pane m-a open st-force"><div class="content"></div><div class="foot"><div class="drawer"></div><div class="bar"></div></div></div></div>
+        <div><div class="lbl">Easing off</div><div class="screen pane m-a open st-ease"><div class="content"></div><div class="foot"><div class="drawer"></div><div class="bar"></div></div></div></div>
+      </div>
+      <div class="cap"><span class="pick">3A</span>Looks right<span class="cost">settles it</span></div>
+    </div>
+    <div class="col">
+      <div class="screen" style="width:420px;height:80px;display:grid;place-items:center;color:var(--app-muted)">your fix in the note</div>
+      <div class="cap"><span class="pick">3B</span>Right, with a fix<span class="cost">say what in notes</span></div>
+    </div>
+  </div>
+</section>
+
+<details class="archive">
+  <summary>Earlier rounds</summary>
+  <p>R1: 1 growth (A over list, B pushes list, C sheet) → 1A. 2 trigger (A hover, B click, C hover+pin) → 2B; you: "change to click instead of hover".</p>
+</details>
+
+<section id="manual">
+  <h3>Manual copy</h3>
+  <textarea id="answer" readonly placeholder="Click options above. Your answer appears here."></textarea>
+  <div id="legend"></div>
+</section>
+
+<div id="bar">
+  <div id="groups" style="display:flex;flex-wrap:wrap;gap:10px 18px"></div>
+  <div class="actions">
+    <span id="count"></span>
+    <input id="line" readonly aria-label="Answer line">
+    <button id="copy">Copy my picks</button>
+    <button id="clear">Clear</button>
+    <span id="toast"></span>
+  </div>
+</div>
+
+<script>
+(function () {
+  var KEY = document.body.dataset.key || location.pathname;
+  var state = { picks: {}, notes: {} };
+  try {
+    var saved = JSON.parse(localStorage.getItem(KEY) || "{}");
+    state.picks = saved.picks || {};
+    state.notes = saved.notes || {};
+  } catch (e) {}
+
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+  function issueOf(code) { var m = /^(\d+)/.exec(code); return m ? m[1] : code; }
+
+  var issues = [];
+  var options = {};
+  var labels = {};
+  var cards = {};
+
+  document.querySelectorAll(".issue").forEach(function (sec) {
+    var id = sec.dataset.issue;
+    var title = sec.querySelector("h2");
+    labels[id] = title ? title.textContent.replace(/^\s*\d+\s*/, "").trim() : id;
+    issues.push(id);
+    options[id] = [];
+
+    sec.querySelectorAll(".col").forEach(function (col) {
+      var chip = col.querySelector(".cap .pick");
+      if (!chip) return;
+      var code = chip.textContent.trim();
+      if (!/^\d+[A-Za-z]/.test(code)) return;
+      var name = (chip.nextSibling && chip.nextSibling.textContent || "").trim();
+      col.dataset.opt = code;
+      var tick = document.createElement("span");
+      tick.className = "tick";
+      tick.textContent = "✓";
+      col.appendChild(tick);
+      col.addEventListener("click", function (ev) {
+        if (ev.target.closest("textarea, input, a, select")) return;
+        choose(code);
+      });
+      cards[code] = col;
+      options[id].push({ code: code, name: name });
+    });
+
+    if (sec.dataset.keep !== "drawn") options[id].push({ code: id + "-keep", name: "keep as-is" });
+
+    var ta = document.createElement("textarea");
+    ta.className = "notes";
+    ta.dataset.issue = id;
+    ta.placeholder = "Notes on " + id + ": what's off, or what would make it the one";
+    ta.value = state.notes[id] || "";
+    ta.addEventListener("input", function () {
+      if (ta.value.trim()) state.notes[id] = ta.value; else delete state.notes[id];
+      save();
+      render();
+    });
+    sec.appendChild(ta);
+  });
+
+  var groups = document.getElementById("groups");
+  issues.forEach(function (id) {
+    var g = document.createElement("div");
+    g.className = "grp";
+    var b = document.createElement("b");
+    b.textContent = id;
+    g.appendChild(b);
+    options[id].forEach(function (o) {
+      var btn = document.createElement("button");
+      btn.dataset.code = o.code;
+      btn.title = o.name;
+      btn.textContent = /-keep$/.test(o.code) ? "keep" : o.code.slice(id.length);
+      btn.addEventListener("click", function () {
+        choose(o.code);
+        if (cards[o.code]) cards[o.code].scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+      });
+      g.appendChild(btn);
+    });
+    groups.appendChild(g);
+  });
+
+  document.getElementById("legend").textContent = issues.map(function (id) {
+    return id + "  " + labels[id] + "\n" + options[id].map(function (o) {
+      return "    " + o.code + "  " + o.name;
+    }).join("\n");
+  }).join("\n");
+
+  function choose(code) {
+    var id = issueOf(code);
+    if (state.picks[id] === code) delete state.picks[id]; else state.picks[id] = code;
+    save();
+    render();
+  }
+
+  function answerLine() {
+    return issues.filter(function (id) { return state.picks[id]; })
+      .map(function (id) { return state.picks[id]; }).join("  ");
+  }
+
+  function fullAnswer() {
+    var out = answerLine();
+    var notes = issues.filter(function (id) { return state.notes[id] && state.notes[id].trim(); })
+      .map(function (id) { return id + " (" + labels[id] + "): " + state.notes[id].trim().replace(/\s*\n\s*/g, " / "); });
+    if (notes.length) out += "\n\n" + notes.join("\n");
+    return out;
+  }
+
+  function render() {
+    Object.keys(cards).forEach(function (code) {
+      cards[code].classList.toggle("picked", state.picks[issueOf(code)] === code);
+    });
+    document.querySelectorAll("#groups button").forEach(function (btn) {
+      btn.classList.toggle("on", state.picks[issueOf(btn.dataset.code)] === btn.dataset.code);
+    });
+    var n = issues.filter(function (id) { return state.picks[id]; }).length;
+    document.getElementById("count").textContent = n + " / " + issues.length;
+    document.getElementById("line").value = answerLine();
+    document.getElementById("answer").value = fullAnswer();
+  }
+
+  function flash(msg) {
+    var t = document.getElementById("toast");
+    t.textContent = msg;
+    setTimeout(function () { t.textContent = ""; }, 2500);
+  }
+
+  function fallbackCopy() {
+    var ta = document.getElementById("answer");
+    ta.focus();
+    ta.select();
+    var ok = false;
+    try { ok = document.execCommand("copy"); } catch (e) {}
+    if (ok) flash("copied");
+    else { ta.scrollIntoView({ block: "center" }); flash("press ⌘C"); }
+  }
+
+  document.getElementById("copy").addEventListener("click", function () {
+    var text = fullAnswer();
+    if (!text) { flash("nothing picked"); return; }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { flash("copied"); }, fallbackCopy);
+    } else fallbackCopy();
+  });
+
+  document.getElementById("clear").addEventListener("click", function () {
+    state = { picks: {}, notes: {} };
+    document.querySelectorAll("textarea.notes").forEach(function (ta) { ta.value = ""; });
+    save();
+    render();
+  });
+
+  ["line", "answer"].forEach(function (id) {
+    document.getElementById(id).addEventListener("focus", function (ev) { ev.target.select(); });
+  });
+
+  render();
+})();
+</script>
+<script>
+(function () {
+  var rows = [[704, 'MenuBarAgent', '0.1%', '8 MB'], [512, 'cfprefsd', '0.1%', '5 MB'], [388, 'distnoted', '0.1%', '1 MB'], [91, 'notifyd', '0.1%', '3 MB'], [722, 'sharingd', '0.1%', '3 MB'], [640, 'mdworker', '0.1%', '2 MB'], [433, 'coreaudiod', '0.0%', '0 MB'], [205, 'powerd', '0.0%', '0 MB'], [808, 'usernoted', '0.0%', '0 MB'], [811, 'secd', '0.0%', '0 MB'], [902, 'AirPlayUIAgent', '0.0%', '0 MB'], [903, 'TextInputMenu', '0.0%', '0 MB'], [905, 'ControlCenter', '0.0%', '0 MB'], [906, 'Spotlight', '0.0%', '0 MB']];
+  var content = rows.map(function (r) { return '<div class="r"><span>' + r[0] + '</span><span>' + r[1] + '</span><span>' + r[2] + '</span><span>' + r[3] + '</span></div>'; }).join('');
+  var sus = [['Orca', 10, '1.0 GB', 0], ['node', 0, '601 MB', 1], ['node', 0, '405 MB', 1], ['claude', 0, '291 MB', 1], ['claude', 0, '210 MB', 1]];
+  var list = '<div class="dh"><b>Strained</b><span style="color:var(--app-muted)">memory pressure high</span></div><div class="ds">Likely culprits · by memory</div>' +
+    sus.map(function (s) { return '<div class="dr"><span>' + s[0] + (s[1] ? ' <em>×' + s[1] + '</em>' : '') + '</span><span class="v">' + s[2] + '</span>' + (s[3] ? '<span class="q">Quit</span>' : '<span class="no">–</span>') + '</div>'; }).join('') + '<div style="height:6px"></div>';
+  var bar = '<b>Strained</b><span class="chev">▴</span><span class="pips"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span><span class="pin">pinned</span><span class="stp">−&nbsp; 2000ms &nbsp;+</span><span class="ib">❚❚</span><span class="ib">⚙</span>';
+  document.querySelectorAll('.pane').forEach(function (p) {
+    p.querySelector('.content').innerHTML = content;
+    p.querySelector('.bar').innerHTML = bar;
+    var d = p.querySelector('.drawer');
+    d.innerHTML = (d.innerHTML || '') + list;
+    if (p.classList.contains('st-force')) { var q = p.querySelectorAll('.dr'); q[1].lastChild.outerHTML = '<span class="q force">Force quit</span>'; q[2].lastChild.outerHTML = '<span class="busy">Quitting…</span>'; }
+    if (p.classList.contains('st-ease')) p.querySelector('.dh span').textContent = 'easing off';
+    if (!p.classList.contains('t-click')) return;
+    var foot = p.querySelector('.foot');
+    var mode = p.classList.contains('t-click') ? 'click' : p.classList.contains('t-pin') ? 'pin' : 'hover';
+    var t = null;
+    function set(on) { p.classList.toggle('open', on); }
+    foot.addEventListener('mouseenter', function () { clearTimeout(t); if (mode !== 'click') t = setTimeout(function () { set(true); }, 200); });
+    foot.addEventListener('mouseleave', function () { clearTimeout(t); if (mode === 'click' || p.classList.contains('pinned')) return; t = setTimeout(function () { set(false); }, 250); });
+    p.querySelector('.bar').addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      if (mode === 'click') set(!p.classList.contains('open'));
+      if (mode === 'pin') { var pin = !p.classList.contains('pinned'); p.classList.toggle('pinned', pin); set(pin || foot.matches(':hover')); }
+    });
+  });
+})();
+</script>
+</body>
+</html>

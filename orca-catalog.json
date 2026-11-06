@@ -129,6 +129,62 @@
           }
         }
       ]
+    },
+    {
+      "id": "aamonnaig4.activity-monitor",
+      "source": {
+        "kind": "git",
+        "url": "https://github.com/aamonnaig4/orca-plugins.git",
+        "ref": "main",
+        "path": "plugins/activity-monitor"
+      },
+      "description": "Live CPU, memory, network, disk, GPU and processes in the sidebar, with a health strip that warns before your computer locks up.",
+      "categories": [
+        "utilities"
+      ],
+      "releases": [
+        {
+          "version": "1.0.0",
+          "commit": "eda1b2c12e23c796654f82f5b9d6ff6ba15af4ad",
+          "contentHash": "376839067d6b90578025765378b5ad6ce1c93493452836a0fd37737af4d81821",
+          "execution": "trusted-worker",
+          "minimumOrca": "1.4.248",
+          "name": "Activity Monitor",
+          "contributes": [
+            {
+              "kind": "panels",
+              "name": "Activity Monitor"
+            },
+            {
+              "kind": "statusBarItems",
+              "name": "Critical"
+            }
+          ],
+          "capabilities": [
+            "notifications:show",
+            "agent:read",
+            "terminal:send"
+          ],
+          "images": {
+            "cover": {
+              "path": "plugins/activity-monitor/media/cover.png",
+              "alt": "Activity Monitor with live CPU, memory, network, disk and GPU graphs, and a red Critical strip offering to quit Google Chrome",
+              "sha256": "569c3b2f606f0c737c1379ba3e6752552a0917ea3a79c51cda48be52917c1a78",
+              "width": 1600,
+              "height": 1000
+            },
+            "screenshots": [
+              {
+                "path": "plugins/activity-monitor/media/screens.png",
+                "alt": "The All tab with a large CPU chart and tiles, the CPU tab with a graph per core, and the Processes tab sorted by CPU",
+                "sha256": "9d43f6aa4df3377379e1480d4a62b4b4bec650b433285e621da18a1c5ee47df5",
+                "width": 1600,
+                "height": 1000
+              }
+            ]
+          }
+        }
+      ]
     }
   ]
 }

@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Design options: charts</title>
+<style>
+:root {
+  --app-bg: #ffffff;
+  --app-fg: #0a0a0a;
+  --app-muted: #737373;
+  --app-border: #e5e5e5;
+  --app-accent: #f0f0f0;
+  --app-danger: #dc2626;
+  --app-radius: 8px;
+  --app-font: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  --doc-bg: #f1efe9;
+  --doc-fg: #2b2a27;
+  --doc-muted: #8a877f;
+  --doc-pick: #16a34a;
+  --doc-font: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --doc-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --doc-surface: #ffffff;
+  --doc-line: #0002;
+  --doc-shadow: #0001;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --doc-bg: #161513;
+    --doc-fg: #e9e6df;
+    --doc-muted: #8f8b82;
+    --doc-pick: #22c55e;
+    --doc-surface: #211f1c;
+    --doc-line: #fff2;
+    --doc-shadow: #0006;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; padding: 24px 24px 220px; background: var(--doc-bg); color: var(--doc-fg); font: 14px/1.4 var(--doc-font); }
+header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 20px; }
+header h1 { font-size: 20px; margin: 0; }
+.round { font: 600 11px var(--doc-mono); background: var(--doc-fg); color: var(--doc-bg); padding: 3px 8px; border-radius: 99px; }
+.ledger { margin: 0 0 24px; padding: 10px 14px; border-left: 3px solid var(--doc-pick); background: var(--doc-surface); font-size: 13px; }
+.ledger div::before { content: "\2713  "; color: var(--doc-pick); font-weight: 700; }
+.issue { margin: 0 0 40px; }
+.issue h2 { font-size: 16px; margin: 0 0 4px; }
+.issue h2 .num { font-family: var(--doc-mono); color: var(--doc-muted); margin-right: 6px; }
+.said { color: var(--doc-muted); font-size: 12px; margin: 0 0 10px; }
+.said::before { content: "you: "; font-weight: 600; }
+.view { font-size: 12px; margin: 6px 0 0; color: var(--doc-muted); }
+.view::before { content: "my view: "; font-weight: 600; }
+.row { display: flex; gap: 16px; overflow-x: auto; padding: 6px 4px 10px; }
+.col { flex: 0 0 auto; position: relative; border-radius: 12px; padding: 8px; outline: 2px solid transparent; transition: outline-color .12s; }
+.col[data-opt] { cursor: pointer; }
+.col[data-opt]:hover { outline-color: var(--doc-line); }
+.col.picked { outline: 3px solid var(--doc-pick); background: color-mix(in srgb, var(--doc-pick) 8%, transparent); }
+.tick { display: none; position: absolute; top: -8px; right: -8px; width: 24px; height: 24px; border-radius: 50%; background: var(--doc-pick); color: #fff; font: 700 14px/24px var(--doc-font); text-align: center; }
+.col.picked .tick { display: block; }
+.cap { margin-top: 8px; font-size: 13px; max-width: 360px; }
+.cap .pick { font: 700 12px var(--doc-mono); background: var(--doc-fg); color: var(--doc-bg); padding: 1px 6px; border-radius: 4px; margin-right: 6px; }
+.cap .cost { display: block; color: var(--doc-muted); font-size: 12px; }
+.now .cap .pick { background: var(--doc-muted); }
+.screen { background: var(--app-bg); color: var(--app-fg); font-family: var(--app-font); border: 1px solid var(--app-border); border-radius: var(--app-radius); overflow: hidden; box-shadow: 0 6px 24px var(--doc-shadow); }
+.phone { width: 393px; min-height: 600px; border-radius: 44px; border: 10px solid #111; }
+textarea.notes { display: block; width: 100%; max-width: 760px; min-height: 40px; margin-top: 6px; padding: 8px; font: 13px var(--doc-font); border: 1px solid var(--doc-line); border-radius: 6px; background: var(--doc-surface); color: var(--doc-fg); resize: vertical; }
+details.archive { margin: 40px 0; color: var(--doc-muted); }
+#manual { margin-top: 48px; padding: 16px; background: var(--doc-surface); border: 1px dashed var(--doc-line); border-radius: 10px; max-width: 760px; }
+#manual h3 { margin: 0 0 8px; font-size: 14px; }
+#manual textarea { width: 100%; min-height: 90px; font: 13px var(--doc-mono); padding: 8px; border: 1px solid var(--doc-line); border-radius: 6px; background: var(--doc-bg); color: var(--doc-fg); }
+#legend { font: 12px var(--doc-mono); color: var(--doc-muted); margin: 10px 0 0; white-space: pre-wrap; user-select: all; }
+#bar { position: fixed; left: 0; right: 0; bottom: 0; background: #1c1b19f2; color: #eee; padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; font-size: 12px; z-index: 10; }
+#bar .grp { display: flex; gap: 4px; align-items: center; }
+#bar .grp b { font-family: var(--doc-mono); color: #aaa; margin-right: 2px; }
+#bar button { font: 600 12px var(--doc-mono); border: 1px solid #555; background: #2a2926; color: #ddd; padding: 3px 8px; border-radius: 5px; cursor: pointer; }
+#bar button.on { background: var(--doc-pick); border-color: var(--doc-pick); color: #fff; }
+#bar .actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+#bar input#line { width: 260px; font: 12px var(--doc-mono); background: #000; color: #fff; border: 1px solid #555; border-radius: 5px; padding: 4px 6px; }
+#bar #copy { background: #fff; color: #111; border-color: #fff; }
+#count { font-family: var(--doc-mono); color: #aaa; }
+#toast { color: #8f8; min-width: 60px; }
+.diag { max-width: 900px; margin: 0 0 28px; padding: 10px 14px; background: var(--doc-surface); border-left: 3px solid #d97706; font-size: 13px; }
+.diag code { font-family: var(--doc-mono); font-size: 12px; }
+.pl { width: 367px; background: #fff; color: #171717; font: 12px/1.35 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+.pl.card { height: 230px; }
+.pl.cores { height: 470px; gap: 4px; }
+.h { flex: none; } .h b { font-size: 20px; font-weight: 600; } .h u { text-decoration: none; color: #737373; }
+.ch { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.cw { position: relative; flex: 1; min-height: 0; }
+.bd { border-left: 1px solid #d4d4d4; border-bottom: 1px solid #d4d4d4; }
+.grid3 { background: linear-gradient(#ececec, #ececec) 0 0 / 100% 1px no-repeat, linear-gradient(#ececec, #ececec) 0 50% / 100% 1px no-repeat; }
+.grid1 { background: linear-gradient(to right, #e5e5e5 50%, transparent 0) 0 50% / 6px 1px repeat-x; }
+.grid2 { background: linear-gradient(to right, #e5e5e5 50%, transparent 0) 0 50% / 6px 1px repeat-x, linear-gradient(#e5e5e5, #e5e5e5) 0 100% / 100% 1px no-repeat; }
+.ax { flex: 1; min-height: 0; display: grid; grid-template-columns: 30px 1fr; grid-template-rows: 1fr 12px; font: 9px ui-monospace, Menlo, monospace; color: #737373; }
+.ax.mini { grid-template-rows: 1fr; }
+.yl { display: flex; flex-direction: column; justify-content: space-between; text-align: right; padding-right: 4px; }
+.xl { grid-column: 2; display: flex; justify-content: space-between; }
+.xl.solo { margin-left: 64px; margin-right: 34px; font: 9px ui-monospace, Menlo, monospace; color: #737373; }
+.ax2 { flex: 1; min-height: 0; display: flex; }
+.ax3 { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 30px; }
+.yr { display: flex; flex-direction: column; justify-content: space-between; padding-left: 4px; font: 9px ui-monospace, Menlo, monospace; color: #737373; }
+.tag { position: absolute; font: 9px ui-monospace, Menlo, monospace; color: #8a8a8a; background: rgba(255,255,255,.8); padding: 0 2px; }
+.tag.tl { left: 0; top: 0; } .tag.ml { left: 0; top: calc(50% - 7px); } .tag.br { right: 0; bottom: 0; }
+.hov { cursor: crosshair; } .hov .xh, .hov .tt { display: none; }
+.hov:hover .xh { display: block; position: absolute; left: 62%; top: 0; bottom: 0; border-left: 1px solid #a3a3a3; }
+.hov:hover .tt { display: block; position: absolute; left: calc(62% + 6px); top: 6px; background: #171717; color: #fff; font-size: 10.5px; padding: 2px 6px; border-radius: 4px; }
+.crow { display: grid; grid-template-columns: 20px 1fr 32px; align-items: center; gap: 6px; flex: 1; min-height: 0; font: 10px ui-monospace, Menlo, monospace; }
+.crow b { font-weight: 500; color: #737373; } .crow em { font-style: normal; text-align: right; }
+.crow .ax.mini { height: 100%; }
+.crow .row1 { height: 100%; }
+.crow.bar { grid-template-columns: 20px 1fr 70px 32px; flex: none; height: 22px; }
+.bt { height: 8px; background: #f0f0f0; border-radius: 4px; overflow: hidden; } .bt i { display: block; height: 100%; border-radius: 4px; opacity: .7; }
+.tiny { height: 18px; }
+.cg { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; flex: 1; grid-auto-rows: 1fr; }
+.cg > div { display: flex; flex-direction: column; min-height: 0; }
+.cl { display: flex; justify-content: space-between; font: 10px ui-monospace, Menlo, monospace; } .cl b { font-weight: 500; color: #737373; } .cl em { font-style: normal; }
+.sm { flex: 1; }
+.note, .yscale { font: 9px ui-monospace, Menlo, monospace; color: #8a8a8a; text-align: right; }
+</style>
+</head>
+<body data-key="design-options:am-charts:r1">
+
+<header>
+  <span class="round">ROUND 1</span>
+  <h1>One calm chart style everywhere</h1>
+</header>
+
+<div class="ledger">
+  <div>Applies to every chart: All tiles, CPU, Memory, Network, Disk, GPU, Energy</div>
+</div>
+
+<div class="diag"><b>Why it's busy:</b> each chart picks its own point count (90, 60, 50), so time spans differ (−3m vs −98s); every core repeats 100%/0%; the heat gradient changes line color mid-line. · <code>panel/app.js</code> <code>graph()</code> / <code>axes()</code>, <code>panel/graph.js</code> <code>draw()</code></div>
+
+<section class="issue" data-issue="1">
+  <h2><span class="num">1</span>What does the line look like?</h2>
+  <p class="said">these charts and axis are busy · standardized easy to read chart</p>
+  <div class="row">
+    <div class="col now"><div class="screen pl card" data-mock="l-now"></div><div class="cap"><span class="pick">NOW</span>Heat gradient line + fill</div></div>
+    <div class="col"><div class="screen pl card" data-mock="1A"></div><div class="cap"><span class="pick">1A</span>One color + soft fill<span class="cost">Color per metric; heat only in numbers</span></div></div>
+    <div class="col"><div class="screen pl card" data-mock="1B"></div><div class="cap"><span class="pick">1B</span>Thin line, no fill<span class="cost">Quietest; small dips harder to see</span></div></div>
+    <div class="col"><div class="screen pl card" data-mock="1C"></div><div class="cap"><span class="pick">1C</span>Solid area<span class="cost">Reads like a level; no line</span></div></div>
+  </div>
+</section>
+
+<section class="issue" data-issue="2">
+  <h2><span class="num">2</span>How much axis?</h2>
+  <div class="row">
+    <div class="col now"><div class="screen pl card" data-mock="a-now"></div><div class="cap"><span class="pick">NOW</span>3 labels each side + axis lines</div></div>
+    <div class="col"><div class="screen pl card" data-mock="2A"></div><div class="cap"><span class="pick">2A</span>Max + 50% line, span once<span class="cost">Two labels per chart</span></div></div>
+    <div class="col"><div class="screen pl card" data-mock="2B"></div><div class="cap"><span class="pick">2B</span>Labels on the right edge<span class="cost">Like stock charts; no time labels</span></div></div>
+    <div class="col"><div class="screen pl card" data-mock="2C"></div><div class="cap"><span class="pick">2C</span>No axes, hover to read<span class="cost">Cleanest; values need a hover</span></div></div>
+  </div>
+  <p class="view">2C: hover the chart</p>
+</section>
+
+<section class="issue" data-issue="3">
+  <h2><span class="num">3</span>What time window?</h2>
+  <div class="row">
+    <div class="col now"><div class="screen pl card" data-mock="t-now"></div><div class="cap"><span class="pick">NOW</span>Each chart its own; blank at start</div></div>
+    <div class="col"><div class="screen pl card" data-mock="3A"></div><div class="cap"><span class="pick">3A</span>Same window everywhere<span class="cost">Blank until history fills</span></div></div>
+    <div class="col"><div class="screen pl card" data-mock="3B"></div><div class="cap"><span class="pick">3B</span>Same window, stretch to fill<span class="cost">No blank; early seconds look wider</span></div></div>
+  </div>
+</section>
+
+<section class="issue" data-issue="4">
+  <h2><span class="num">4</span>CPU page cores?</h2>
+  <div class="row">
+    <div class="col now"><div class="screen pl cores" data-mock="c-now"></div><div class="cap"><span class="pick">NOW</span>Each core with its own axes</div></div>
+    <div class="col"><div class="screen pl cores" data-mock="4A"></div><div class="cap"><span class="pick">4A</span>Grid of 2, no axes<span class="cost">Shared scale 0–100%; twice as tall</span></div></div>
+    <div class="col"><div class="screen pl cores" data-mock="4B"></div><div class="cap"><span class="pick">4B</span>Rows, one shared axis<span class="cost">Long list; time labels once</span></div></div>
+    <div class="col"><div class="screen pl cores" data-mock="4C"></div><div class="cap"><span class="pick">4C</span>Bars now + tiny trend<span class="cost">Fits 64 cores; less history</span></div></div>
+  </div>
+</section>
+
+<details class="archive"><summary>Earlier rounds</summary><p>All page, cores, pages: mockup-all.html, mockup-cores.html, mockup-pages.html.</p></details>
+
+
+<section id="manual">
+  <h3>Manual copy</h3>
+  <textarea id="answer" readonly placeholder="Click options above. Your answer appears here."></textarea>
+  <div id="legend"></div>
+</section>
+
+<div id="bar">
+  <div id="groups" style="display:flex;flex-wrap:wrap;gap:10px 18px"></div>
+  <div class="actions">
+    <span id="count"></span>
+    <input id="line" readonly aria-label="Answer line">
+    <button id="copy">Copy my picks</button>
+    <button id="clear">Clear</button>
+    <span id="toast"></span>
+  </div>
+</div>
+
+<script>
+(function () {
+  var C = { green: '#15803d', amber: '#b45309', red: '#dc2626', blue: '#2563eb', grid: '#e5e5e5', muted: '#737373' }
+  function rnd(seed) { return function () { seed = (seed * 9301 + 49297) % 233280; return seed / 233280 } }
+  function series(seed, base, amp, n) { var r = rnd(seed), v = base, out = []; for (var i = 0; i < n; i++) { v += (r() - 0.5) * amp; v = Math.max(3, Math.min(97, v * 0.85 + base * 0.15)); out.push(v) } return out }
+  var uid = 0
+  function pts(vals, from) { var n = vals.length; return vals.map(function (v, i) { return ((from + (i / (n - 1)) * (100 - from))).toFixed(2) + ',' + (100 - v).toFixed(2) }) }
+  function svg(vals, style, from) {
+    from = from || 0
+    var id = 'g' + (uid++)
+    var p = pts(vals, from)
+    var line = 'M' + p.join(' L')
+    var area = line + ' L100,100 L' + from + ',100 Z'
+    var defs = '<defs><linearGradient id="' + id + '" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="' + C.green + '"/><stop offset=".55" stop-color="' + C.green + '"/><stop offset=".75" stop-color="' + C.amber + '"/><stop offset="1" stop-color="' + C.red + '"/></linearGradient><linearGradient id="f' + id + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="' + C.blue + '" stop-opacity=".22"/><stop offset="1" stop-color="' + C.blue + '" stop-opacity="0"/></linearGradient></defs>'
+    var body
+    if (style === 'heat') body = '<path d="' + area + '" fill="rgba(180,83,9,.08)"/><path d="' + line + '" fill="none" stroke="url(#' + id + ')" stroke-width="1.6" vector-effect="non-scaling-stroke"/>'
+    else if (style === 'soft') body = '<path d="' + area + '" fill="url(#f' + id + ')"/><path d="' + line + '" fill="none" stroke="' + C.blue + '" stroke-width="1.6" vector-effect="non-scaling-stroke"/>'
+    else if (style === 'thin') body = '<path d="' + line + '" fill="none" stroke="' + C.blue + '" stroke-width="1.2" vector-effect="non-scaling-stroke"/>'
+    else body = '<path d="' + area + '" fill="' + C.blue + '" fill-opacity=".35"/>'
+    return '<svg class="ch" viewBox="0 0 100 100" preserveAspectRatio="none">' + defs + body + '</svg>'
+  }
+  var CPU = series(9, 55, 34, 60)
+  function head() { return '<div class="h"><b>62%</b><u> · 10 cores</u></div>' }
+  function nowAxes(inner) { return '<div class="ax"><div class="yl"><span>100%</span><span>50%</span><span>0%</span></div><div class="cw bd grid3">' + inner + '</div><div class="xl"><span>−89s</span><span>−45s</span><span>now</span></div></div>' }
+  function soft(inner) { return '<div class="ax2"><div class="cw grid1">' + inner + '<span class="tag tl">100%</span><span class="tag ml">50%</span><span class="tag br">last 2 min</span></div></div>' }
+  function right(inner) { return '<div class="ax3"><div class="cw grid2">' + inner + '</div><div class="yr"><span>100%</span><span>50%</span><span>0</span></div></div>' }
+  function hover(inner) { return '<div class="ax2"><div class="cw hov">' + inner + '<div class="xh"></div><div class="tt">54% · 38s ago</div></div></div>' }
+  var CORES = [75, 75, 75, 75, 67, 62, 54, 49, 44, 41]
+  var LBL = ['P1', 'P2', 'P3', 'P4', 'E1', 'E2', 'E3', 'E4', 'E5', 'E6']
+  function heat(v) { return v < 50 ? C.green : v < 80 ? C.amber : C.red }
+  var build = {
+    'l-now': function (el) { el.innerHTML = head() + nowAxes(svg(CPU, 'heat')) },
+    '1A': function (el) { el.innerHTML = head() + nowAxes(svg(CPU, 'soft')) },
+    '1B': function (el) { el.innerHTML = head() + nowAxes(svg(CPU, 'thin')) },
+    '1C': function (el) { el.innerHTML = head() + nowAxes(svg(CPU, 'solid')) },
+    'a-now': function (el) { el.innerHTML = head() + nowAxes(svg(CPU, 'soft')) },
+    '2A': function (el) { el.innerHTML = head() + soft(svg(CPU, 'soft')) },
+    '2B': function (el) { el.innerHTML = head() + right(svg(CPU, 'soft')) },
+    '2C': function (el) { el.innerHTML = head() + hover(svg(CPU, 'soft')) },
+    't-now': function (el) { el.innerHTML = head() + soft(svg(CPU.slice(-30), 'soft', 50)).replace('last 2 min', '−3m … now') },
+    '3A': function (el) { el.innerHTML = head() + soft(svg(CPU.slice(-30), 'soft', 50)) },
+    '3B': function (el) { el.innerHTML = head() + soft(svg(CPU.slice(-30), 'soft', 0)).replace('last 2 min', 'last 1 min') },
+    'c-now': function (el) {
+      el.innerHTML = LBL.slice(0, 6).map(function (l, i) { return '<div class="crow"><b>' + l + '</b><div class="ax mini"><div class="yl"><span>100%</span><span>0%</span></div><div class="cw bd">' + svg(series(i * 5 + 2, CORES[i], 18, 40), 'heat') + '</div></div><em>' + CORES[i] + '%</em></div>' }).join('') + '<div class="xl solo"><span>−98s</span><span>−49s</span><span>now</span></div>'
+    },
+    '4A': function (el) {
+      el.innerHTML = '<div class="cg">' + LBL.map(function (l, i) { return '<div><div class="cl"><b>' + l + '</b><em>' + CORES[i] + '%</em></div><div class="cw grid1 sm">' + svg(series(i * 5 + 2, CORES[i], 18, 40), 'soft') + '</div></div>' }).join('') + '</div><div class="note">all cores: 0–100%, last 2 min</div>'
+    },
+    '4B': function (el) {
+      el.innerHTML = '<div class="yscale"><span>0–100% · last 2 min</span></div>' + LBL.map(function (l, i) { return '<div class="crow"><b>' + l + '</b><div class="cw grid1 row1">' + svg(series(i * 5 + 2, CORES[i], 18, 40), 'soft') + '</div><em>' + CORES[i] + '%</em></div>' }).join('') + '<div class="xl solo"><span>−2m</span><span>−1m</span><span>now</span></div>'
+    },
+    '4C': function (el) {
+      el.innerHTML = LBL.map(function (l, i) { return '<div class="crow bar"><b>' + l + '</b><span class="bt"><i style="width:' + CORES[i] + '%;background:' + C.blue + '"></i></span><div class="cw tiny">' + svg(series(i * 5 + 2, CORES[i], 18, 24), 'thin') + '</div><em>' + CORES[i] + '%</em></div>' }).join('')
+    }
+  }
+  document.addEventListener('DOMContentLoaded', function () { document.querySelectorAll('[data-mock]').forEach(function (el) { build[el.dataset.mock](el) }) })
+})()
+
+</script>
+<script>
+(function () {
+  var KEY = document.body.dataset.key || location.pathname;
+  var state = { picks: {}, notes: {} };
+  try {
+    var saved = JSON.parse(localStorage.getItem(KEY) || "{}");
+    state.picks = saved.picks || {};
+    state.notes = saved.notes || {};
+  } catch (e) {}
+
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+  function issueOf(code) { var m = /^(\d+)/.exec(code); return m ? m[1] : code; }
+
+  var issues = [];
+  var options = {};
+  var labels = {};
+  var cards = {};
+
+  document.querySelectorAll(".issue").forEach(function (sec) {
+    var id = sec.dataset.issue;
+    var title = sec.querySelector("h2");
+    labels[id] = title ? title.textContent.replace(/^\s*\d+\s*/, "").trim() : id;
+    issues.push(id);
+    options[id] = [];
+
+    sec.querySelectorAll(".col").forEach(function (col) {
+      var chip = col.querySelector(".cap .pick");
+      if (!chip) return;
+      var code = chip.textContent.trim();
+      if (!/^\d+[A-Za-z]/.test(code)) return;
+      var name = (chip.nextSibling && chip.nextSibling.textContent || "").trim();
+      col.dataset.opt = code;
+      var tick = document.createElement("span");
+      tick.className = "tick";
+      tick.textContent = "✓";
+      col.appendChild(tick);
+      col.addEventListener("click", function (ev) {
+        if (ev.target.closest("textarea, input, a, select")) return;
+        choose(code);
+      });
+      cards[code] = col;
+      options[id].push({ code: code, name: name });
+    });
+
+    if (sec.dataset.keep !== "drawn") options[id].push({ code: id + "-keep", name: "keep as-is" });
+
+    var ta = document.createElement("textarea");
+    ta.className = "notes";
+    ta.dataset.issue = id;
+    ta.placeholder = "Notes on " + id + ": what's off, or what would make it the one";
+    ta.value = state.notes[id] || "";
+    ta.addEventListener("input", function () {
+      if (ta.value.trim()) state.notes[id] = ta.value; else delete state.notes[id];
+      save();
+      render();
+    });
+    sec.appendChild(ta);
+  });
+
+  var groups = document.getElementById("groups");
+  issues.forEach(function (id) {
+    var g = document.createElement("div");
+    g.className = "grp";
+    var b = document.createElement("b");
+    b.textContent = id;
+    g.appendChild(b);
+    options[id].forEach(function (o) {
+      var btn = document.createElement("button");
+      btn.dataset.code = o.code;
+      btn.title = o.name;
+      btn.textContent = /-keep$/.test(o.code) ? "keep" : o.code.slice(id.length);
+      btn.addEventListener("click", function () {
+        choose(o.code);
+        if (cards[o.code]) cards[o.code].scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+      });
+      g.appendChild(btn);
+    });
+    groups.appendChild(g);
+  });
+
+  document.getElementById("legend").textContent = issues.map(function (id) {
+    return id + "  " + labels[id] + "\n" + options[id].map(function (o) {
+      return "    " + o.code + "  " + o.name;
+    }).join("\n");
+  }).join("\n");
+
+  function choose(code) {
+    var id = issueOf(code);
+    if (state.picks[id] === code) delete state.picks[id]; else state.picks[id] = code;
+    save();
+    render();
+  }
+
+  function answerLine() {
+    return issues.filter(function (id) { return state.picks[id]; })
+      .map(function (id) { return state.picks[id]; }).join("  ");
+  }
+
+  function fullAnswer() {
+    var out = answerLine();
+    var notes = issues.filter(function (id) { return state.notes[id] && state.notes[id].trim(); })
+      .map(function (id) { return id + " (" + labels[id] + "): " + state.notes[id].trim().replace(/\s*\n\s*/g, " / "); });
+    if (notes.length) out += "\n\n" + notes.join("\n");
+    return out;
+  }
+
+  function render() {
+    Object.keys(cards).forEach(function (code) {
+      cards[code].classList.toggle("picked", state.picks[issueOf(code)] === code);
+    });
+    document.querySelectorAll("#groups button").forEach(function (btn) {
+      btn.classList.toggle("on", state.picks[issueOf(btn.dataset.code)] === btn.dataset.code);
+    });
+    var n = issues.filter(function (id) { return state.picks[id]; }).length;
+    document.getElementById("count").textContent = n + " / " + issues.length;
+    document.getElementById("line").value = answerLine();
+    document.getElementById("answer").value = fullAnswer();
+  }
+
+  function flash(msg) {
+    var t = document.getElementById("toast");
+    t.textContent = msg;
+    setTimeout(function () { t.textContent = ""; }, 2500);
+  }
+
+  function fallbackCopy() {
+    var ta = document.getElementById("answer");
+    ta.focus();
+    ta.select();
+    var ok = false;
+    try { ok = document.execCommand("copy"); } catch (e) {}
+    if (ok) flash("copied");
+    else { ta.scrollIntoView({ block: "center" }); flash("press ⌘C"); }
+  }
+
+  document.getElementById("copy").addEventListener("click", function () {
+    var text = fullAnswer();
+    if (!text) { flash("nothing picked"); return; }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { flash("copied"); }, fallbackCopy);
+    } else fallbackCopy();
+  });
+
+  document.getElementById("clear").addEventListener("click", function () {
+    state = { picks: {}, notes: {} };
+    document.querySelectorAll("textarea.notes").forEach(function (ta) { ta.value = ""; });
+    save();
+    render();
+  });
+
+  ["line", "answer"].forEach(function (id) {
+    document.getElementById(id).addEventListener("focus", function (ev) { ev.target.select(); });
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

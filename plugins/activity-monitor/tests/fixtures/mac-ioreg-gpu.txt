@@ -1,0 +1,14 @@
++-o AGXAcceleratorG17G  <class AGXAcceleratorG17G, id 0x100000461, registered, matched, active, busy 0 (4611 ms), retain 60>
+  +-o AGXDeviceUserClient  <class AGXDeviceUserClient, id 0x100000ff1, !registered, !matched, active, busy 0, retain 5>
+  |     "AppUsage" = ()
+  |     "IOUserClientCreator" = "pid 420, WindowServer"
+  +-o AGXDeviceUserClient  <class AGXDeviceUserClient, id 0x100000ff2, !registered, !matched, active, busy 0, retain 5>
+  |     "AppUsage" = ({"API"="Metal","lastSubmittedTime"=163763368596416,"accumulatedGPUTime"=10092019104500},{"API"="Metal","lastSubmittedTime"=115363666296041,"accumulatedGPUTime"=31804416},{"API"="Metal","lastSubmittedTime"=162076562708250,"accumulatedGPUTime"=142064875},{"API"="Metal","lastSubmittedTime"=0,"accumulatedGPUTime"=0})
+  |     "IOUserClientCreator" = "pid 420, WindowServer"
+  +-o AGXDeviceUserClient  <class AGXDeviceUserClient, id 0x1000011ef, !registered, !matched, active, busy 0, retain 5>
+  |     "AppUsage" = ()
+  |     "IOUserClientCreator" = "pid 702, AXVisualSupportA"
+  +-o AGXDeviceUserClient  <class AGXDeviceUserClient, id 0x1000011fc, !registered, !matched, active, busy 0, retain 5>
+  |     "AppUsage" = ()
+  |     "IOUserClientCreator" = "pid 425, runningboardd"
+  +-o AGXDeviceUserClient  <class AGXDeviceUserClient, id 0x10000123f, !registered, !matched, active, busy 0, retain 5>
