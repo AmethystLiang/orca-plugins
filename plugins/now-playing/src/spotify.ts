@@ -1,5 +1,6 @@
 import type { Command, Device, NowPlaying, RepeatMode, Row } from './protocol'
 
+export const PLAYER_COVER_PX = 128
 export const REDIRECT_PORT = 8888
 export const REDIRECT_URI = `http://127.0.0.1:${REDIRECT_PORT}/callback`
 export const SCOPES = [
@@ -40,12 +41,12 @@ const arr = (value: unknown): unknown[] => (Array.isArray(value) ? value : [])
 const str = (value: unknown): string | null => (typeof value === 'string' && value !== '' ? value : null)
 const num = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) ? value : null)
 
-export function pickImage(images: unknown): string | null {
+export function pickImage(images: unknown, min = 64): string | null {
   const list = arr(images)
     .map(obj)
     .filter((image): image is Json => image !== null && str(image.url) !== null)
   if (list.length === 0) return null
-  const sized = list.filter((image) => (num(image.width) ?? 0) >= 64).sort((a, b) => (num(a.width) ?? 0) - (num(b.width) ?? 0))
+  const sized = list.filter((image) => (num(image.width) ?? 0) >= min).sort((a, b) => (num(a.width) ?? 0) - (num(b.width) ?? 0))
   return str((sized[0] ?? list[list.length - 1]).url)
 }
 
@@ -84,7 +85,7 @@ export function parsePlayer(value: unknown): NowPlaying | null {
     name: str(item.name) ?? 'Unknown',
     artists: isEpisode ? (str(show?.name) ?? '') : names(item.artists),
     album: isEpisode ? (str(show?.publisher) ?? '') : (str(album?.name) ?? ''),
-    cover: pickImage(isEpisode ? (item.images ?? show?.images) : album?.images),
+    cover: pickImage(isEpisode ? (item.images ?? show?.images) : album?.images, PLAYER_COVER_PX),
     durationMs: num(item.duration_ms) ?? 0,
     progressMs: num(player.progress_ms) ?? 0,
     isPlaying: player.is_playing === true,

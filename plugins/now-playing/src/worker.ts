@@ -26,6 +26,8 @@ export const REFRESH_KEY = 'refreshToken'
 const AUTH_WAIT_MS = 10 * 60_000
 const IMAGE_CACHE_MAX = 400
 const IMAGE_BATCH = 12
+const IMAGE_MAX_CHARS = 200_000
+const ANSWER_BUDGET = 800_000
 const IMAGE_HOST = /^https:\/\/([a-z0-9-]+\.)*(scdn\.co|spotifycdn\.com)\//i
 const STARTS_PLAYBACK = new Set(['play', 'playContext', 'playTrack'])
 
@@ -67,7 +69,7 @@ export function startWorker(orca: OrcaWorkerApi, deps: WorkerDeps): { dispose():
       const type = response.headers.get('content-type') ?? 'image/jpeg'
       if (!/^image\/(jpeg|png|webp)$/.test(type)) return null
       const data = `data:${type};base64,${bytesToBase64(await response.arrayBuffer())}`
-      if (data.length > 65_536) return null
+      if (data.length > IMAGE_MAX_CHARS) return null
       if (images.size >= IMAGE_CACHE_MAX) images.delete(images.keys().next().value as string)
       images.set(url, data)
       return data
@@ -99,7 +101,6 @@ export function startWorker(orca: OrcaWorkerApi, deps: WorkerDeps): { dispose():
       const [player, list] = await Promise.all([client.get('/me/player?additional_types=episode'), devices()])
       const now = parsePlayer(player)
       if (now) {
-        now.cover = await image(now.cover)
         if (now.trackId) {
           let known = liked.get(now.trackId)
           if (known === undefined) {
@@ -169,7 +170,14 @@ export function startWorker(orca: OrcaWorkerApi, deps: WorkerDeps): { dispose():
     if (!Array.isArray(urls)) return {}
     const wanted = urls.filter((url): url is string => typeof url === 'string').slice(0, IMAGE_BATCH)
     const found = await Promise.all(wanted.map(async (url) => [url, await image(url)] as const))
-    return Object.fromEntries(found)
+    const answer: Record<string, string | null> = {}
+    let used = 0
+    for (const [url, data] of found) {
+      if (data !== null && used + data.length > ANSWER_BUDGET) continue
+      answer[url] = data
+      used += data?.length ?? 0
+    }
+    return answer
   })
 
   orca.panels.handle('auth.signOut', async (): Promise<{ ok: true }> => {
