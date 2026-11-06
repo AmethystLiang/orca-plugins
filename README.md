@@ -7,6 +7,7 @@ My personal plugins for [Orca](https://github.com/stablyai/orca). This repositor
 | [OLED Pair](plugins/oled-pair) | True black and true white themes with matching terminal colors |
 | [Activity Monitor](plugins/activity-monitor) | Live CPU, memory, network, disk, GPU and processes in the sidebar, with a health strip that warns before your computer locks up |
 | [Putt Request](plugins/putt-request) | Pixel-art mini golf for the wait between agents, with a private leaderboard |
+| [Now Playing](plugins/now-playing) | Control Spotify from the sidebar: now playing, search, playlists, queue and devices |
 
 ## Install
 

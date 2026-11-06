@@ -185,6 +185,40 @@
           }
         }
       ]
+    },
+    {
+      "id": "aamonnaig4.now-playing",
+      "source": {
+        "kind": "git",
+        "url": "https://github.com/aamonnaig4/orca-plugins.git",
+        "ref": "main",
+        "path": "plugins/now-playing"
+      },
+      "description": "Control Spotify from the sidebar: now playing, controls, search, playlists, queue and devices.",
+      "categories": [
+        "utilities"
+      ],
+      "releases": [
+        {
+          "version": "1.0.0",
+          "commit": "dba4980f85592ced49db12757bc02dde0f1f3eba",
+          "contentHash": "2c9863aae067efcfa1b6a6b272d201db8c41c60403fb07c7f2b7b83dcd9e64b5",
+          "execution": "trusted-worker",
+          "minimumOrca": "1.4.248",
+          "name": "Now Playing",
+          "contributes": [
+            {
+              "kind": "panels",
+              "name": "Now Playing"
+            }
+          ],
+          "capabilities": [
+            "storage:own",
+            "settings:own",
+            "secrets:own"
+          ]
+        }
+      ]
     }
   ]
 }
