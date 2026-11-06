@@ -613,6 +613,7 @@ searchInput.addEventListener('input', () => {
 
 let lastTrack: string | null = null
 let refreshing = false
+let lastError: string | null = null
 async function refresh(): Promise<void> {
   if (refreshing) return
   refreshing = true
@@ -628,9 +629,11 @@ async function refresh(): Promise<void> {
   }
   if (answer.status === 'error') {
     ensureShell()
-    toast(answer.message)
+    if (answer.message !== lastError) toast(answer.message)
+    lastError = answer.message
     return
   }
+  lastError = null
   ensureShell()
   renderPlayer()
   const track = answer.now?.uri ?? null

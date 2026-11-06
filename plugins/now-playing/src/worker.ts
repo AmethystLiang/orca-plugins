@@ -98,10 +98,12 @@ export function startWorker(orca: OrcaWorkerApi, deps: WorkerDeps): { dispose():
           let known = liked.get(now.trackId)
           if (known === undefined) {
             const answer = await client.get(`/me/tracks/contains?ids=${encodeURIComponent(now.trackId)}`).catch(() => null)
-            known = Array.isArray(answer) && answer[0] === true
-            liked.set(now.trackId, known)
+            if (Array.isArray(answer)) {
+              known = answer[0] === true
+              liked.set(now.trackId, known)
+            }
           }
-          now.liked = known
+          now.liked = known ?? null
         }
       }
       return { status: 'ok', now, devices: list, checkedAt: deps.now() }
