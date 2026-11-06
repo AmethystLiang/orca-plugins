@@ -14,6 +14,10 @@ export type Vault = {
   clear(): Promise<void>
 }
 
+export function slowDown(ms: number): string {
+  return `Spotify asked us to slow down. Trying again in ${Math.ceil(ms / 1000)}s.`
+}
+
 export class SpotifyError extends Error {
   constructor(
     message: string,
@@ -32,6 +36,7 @@ const TOKEN_URL = 'https://accounts.spotify.com/api/token'
 export class SpotifyClient {
   private access: { token: string; until: number } | null = null
   private refreshing: Promise<string> | null = null
+  private blockedUntil = 0
 
   constructor(private readonly deps: ClientDeps) {}
 
@@ -84,6 +89,8 @@ export class SpotifyClient {
   }
 
   async call(request: ApiCall, retried = false): Promise<unknown> {
+    const wait = this.blockedUntil - this.deps.now()
+    if (wait > 0) throw new SpotifyError(slowDown(wait), 429)
     const token = await this.token()
     const headers: Record<string, string> = { authorization: `Bearer ${token}` }
     if (request.body) headers['content-type'] = 'application/json'
@@ -95,6 +102,12 @@ export class SpotifyClient {
     if (response.status === 401 && !retried) {
       this.access = null
       return this.call(request, true)
+    }
+    if (response.status === 429) {
+      const seconds = Number(response.headers.get('retry-after'))
+      const ms = Math.min(Math.max(Number.isFinite(seconds) && seconds > 0 ? seconds : 5, 1), 600) * 1000
+      this.blockedUntil = this.deps.now() + ms
+      throw new SpotifyError(slowDown(ms), 429)
     }
     if (response.status === 204 || response.status === 202) return null
     const body = await response.json().catch(() => null)

@@ -26,6 +26,7 @@ export const REFRESH_KEY = 'refreshToken'
 const AUTH_WAIT_MS = 10 * 60_000
 const IMAGE_CACHE_MAX = 400
 const IMAGE_BATCH = 12
+const DEVICES_MS = 30_000
 const IMAGE_MAX_CHARS = 200_000
 const ANSWER_BUDGET = 800_000
 const IMAGE_HOST = /^https:\/\/([a-z0-9-]+\.)*(scdn\.co|spotifycdn\.com)\//i
@@ -93,12 +94,21 @@ export function startWorker(orca: OrcaWorkerApi, deps: WorkerDeps): { dispose():
     return { status: 'signedOut', message: needsClientId ? null : text, needsClientId }
   }
 
-  const devices = async (): Promise<Device[]> => parseDevices(await client.get('/me/player/devices'))
+  let deviceCache: { at: number; list: Device[] } | null = null
+  const devices = async (force = false): Promise<Device[]> => {
+    if (!force && deviceCache && deps.now() - deviceCache.at < DEVICES_MS) return deviceCache.list
+    const list = parseDevices(await client.get('/me/player/devices'))
+    deviceCache = { at: deps.now(), list }
+    return list
+  }
 
   orca.panels.handle('player.get', async (): Promise<PlayerView> => {
     if (!(await client.signedIn())) return signedOutView()
     try {
-      const [player, list] = await Promise.all([client.get('/me/player?additional_types=episode'), devices()])
+      const player = await client.get('/me/player?additional_types=episode')
+      const playing = (player as { device?: { id?: unknown } } | null)?.device?.id
+      const cached = await devices()
+      const list = typeof playing === 'string' && !cached.some((device) => device.id === playing) ? await devices(true) : cached
       const now = parsePlayer(player)
       if (now) {
         if (now.trackId) {
@@ -202,7 +212,8 @@ export function startWorker(orca: OrcaWorkerApi, deps: WorkerDeps): { dispose():
     try {
       let deviceId: string | null = null
       if (STARTS_PLAYBACK.has(command.action)) {
-        const list = await devices()
+        let list = await devices()
+        if (list.length === 0) list = await devices(true)
         if (list.length === 0) return { ok: false, message: 'No device is open. Open Spotify on your Mac or phone.' }
         if (!list.some((device) => device.active)) deviceId = list[0].id
       }
@@ -210,6 +221,7 @@ export function startWorker(orca: OrcaWorkerApi, deps: WorkerDeps): { dispose():
       if (!call) return { ok: false, message: 'That control did not work.' }
       await client.call(call)
       if (command.action === 'like') liked.set(command.trackId, command.on)
+      if (command.action === 'transfer' || command.action === 'volume') deviceCache = null
       return { ok: true }
     } catch (error) {
       return { ok: false, message: message(error) }

@@ -33,7 +33,8 @@ const ICON_CSS = Object.entries(ICONS)
   .join('\n')
 
 type Tab = 'library' | 'queue'
-const POLL_MS = 3000
+const POLL_MS = 5000
+const RETRY_MS = 20_000
 const TAB_KEY = 'tab'
 
 type Frame = {
@@ -682,8 +683,10 @@ function renderQueue(): void {
 
 function loadTab(): void {
   if (tab === 'library' && !library) {
+    libraryAt = Date.now()
     void request<LibraryView>('library.get').then((answer) => {
       library = answer ?? { made: [], playlists: [], artists: [], albums: [], needsReauth: false, message: 'Could not load your library.' }
+      libraryAt = Date.now()
       if (tab === 'library') renderList()
     })
   }
@@ -718,12 +721,13 @@ searchInput.addEventListener('input', () => {
       search = answer ?? { songs: [], artists: [], albums: [], playlists: [], message: 'Search failed.' }
       if (tab === 'library') renderList()
     })
-  }, 300)
+  }, 450)
 })
 
 let lastTrack: string | null = null
 let refreshing = false
 let lastError: string | null = null
+let libraryAt = 0
 async function refresh(): Promise<void> {
   if (refreshing) return
   refreshing = true
@@ -746,6 +750,10 @@ async function refresh(): Promise<void> {
   lastError = null
   ensureShell()
   renderPlayer()
+  if (tab === 'library' && library?.message && Date.now() - libraryAt > RETRY_MS) {
+    library = null
+    loadTab()
+  }
   const track = answer.now?.uri ?? null
   if (track !== lastTrack) {
     lastTrack = track

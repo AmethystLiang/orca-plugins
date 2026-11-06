@@ -200,6 +200,43 @@
       ],
       "releases": [
         {
+          "version": "1.1.2",
+          "commit": "e34dc4798878cd3037b409275ad2a5dedcd370dc",
+          "contentHash": "34b6f895207972e073132c47d99a947b9710cf5e6fbbaf2bbf35364429c9cb32",
+          "execution": "trusted-worker",
+          "minimumOrca": "1.4.248",
+          "name": "Now Playing",
+          "contributes": [
+            {
+              "kind": "panels",
+              "name": "Now Playing"
+            }
+          ],
+          "capabilities": [
+            "storage:own",
+            "settings:own",
+            "secrets:own"
+          ],
+          "images": {
+            "cover": {
+              "path": "plugins/now-playing/media/cover.png",
+              "alt": "Now Playing in Orca's sidebar: a song with its cover art, the device menu open with volume, and the Library with Liked Songs, DJ and daylist",
+              "sha256": "57c9592f8ee0e027e365601266c1dbff415e5a7b3ab5f47dd1b473d8ba9bcc06",
+              "width": 1600,
+              "height": 1000
+            },
+            "screenshots": [
+              {
+                "path": "plugins/now-playing/media/screens.png",
+                "alt": "Three panels: the Library with Made for you and playlists, search results for lantern, and the Queue",
+                "sha256": "cd8876d54776810169be1a087b24c80af3b1b567add13d101caac591a49fd238",
+                "width": 1600,
+                "height": 1000
+              }
+            ]
+          }
+        },
+        {
           "version": "1.1.1",
           "commit": "6426fe6360f8ab09819ca5d10d1cd3b92033f661",
           "contentHash": "80ea24769e72b60b11ab232281f24164da7953b91781f7932f23eca8ed238386",

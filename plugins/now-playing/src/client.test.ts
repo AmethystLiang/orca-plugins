@@ -1,7 +1,7 @@
 import { assert, test } from 'orca/testing'
 import { SpotifyClient, SpotifyError, type FetchFn } from './client'
 
-type Reply = { status: number; body?: unknown }
+type Reply = { status: number; body?: unknown; retryAfter?: string }
 
 function harness(replies: Reply[], refresh: string | null = 'r1') {
   const calls: { url: string; method: string; body?: string; auth?: string }[] = []
@@ -13,7 +13,7 @@ function harness(replies: Reply[], refresh: string | null = 'r1') {
     return {
       ok: reply.status >= 200 && reply.status < 300,
       status: reply.status,
-      headers: { get: () => null },
+      headers: { get: (name: string) => (name === 'retry-after' ? (reply.retryAfter ?? null) : null) },
       json: async () => reply.body ?? null,
       arrayBuffer: async () => new ArrayBuffer(0)
     }
@@ -89,4 +89,18 @@ test('exchange stores the refresh token', async () => {
   await h.client.exchange('code', 'verifier', 'http://127.0.0.1:8888/callback')
   assert.equal(h.stored(), 'fresh')
   assert.ok(h.calls[0].body?.includes('code_verifier=verifier'))
+})
+
+test('a 429 waits out Retry-After without calling Spotify again', async () => {
+  const h = harness([token('a1'), { status: 429, retryAfter: '7' }, { status: 200, body: { ok: true } }])
+  const first = await h.client.get('/me/player').catch((e: unknown) => e)
+  assert.ok(first instanceof SpotifyError && first.status === 429)
+  assert.equal(first.message, 'Spotify asked us to slow down. Trying again in 7s.')
+  const calls = h.calls.length
+  h.advance(6_000)
+  const second = await h.client.get('/me/player').catch((e: unknown) => e)
+  assert.ok(second instanceof SpotifyError && second.status === 429)
+  assert.equal(h.calls.length, calls)
+  h.advance(1_500)
+  assert.deepEqual(await h.client.get('/me/player'), { ok: true })
 })
