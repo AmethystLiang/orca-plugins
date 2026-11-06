@@ -88,8 +88,12 @@ export function parsePmsetBatt(text: string): Battery | null {
 
 export function parseAssertions(text: string): Set<number> {
   const out = new Set<number>()
-  for (const m of text.matchAll(/pid (\d+)\([^)]*\):.*?(PreventUserIdleSystemSleep|PreventSystemSleep|PreventUserIdleDisplaySleep|NoIdleSleepAssertion|NoDisplaySleepAssertion)/g)) {
-    out.add(Number(m[1]))
+  for (const line of text.split('\n')) {
+    const head = /^[ \t]*pid (\d+)\(/.exec(line)
+    if (!head) continue
+    const close = line.indexOf('):', head[0].length)
+    if (close < 0) continue
+    if (/PreventUserIdleSystemSleep|PreventSystemSleep|PreventUserIdleDisplaySleep|NoIdleSleepAssertion|NoDisplaySleepAssertion/.test(line.slice(close + 2))) out.add(Number(head[1]))
   }
   return out
 }

@@ -16,7 +16,7 @@
   var QUIT_GRACE = 8000
   var NAMES = { all: 'All', cpu: 'CPU', mem: 'Memory', net: 'Network', disk: 'Disk', gpu: 'GPU', energy: 'Energy', procs: 'Processes' }
   var ICONS = { all: 'grid', cpu: 'cpu', mem: 'mem', net: 'net', disk: 'disk', gpu: 'gpu', energy: 'bolt', procs: 'proc' }
-  var FOCUS_KEYS = ['tab', 'sort', 'colmenu', 'togglecol', 'resetcols', 'quitsel', 'quit', 'force', 'copy', 'copyname', 'explain', 'no', 'gear', 'pause', 'step', 'setgraph', 'setcolor', 'sethist', 'setstrip', 'setalert', 'setsort', 'setpulse', 'setopen', 'setrows', 'settext', 'resetprefs']
+  var FOCUS_KEYS = ['tile', 'tab', 'hero', 'hquit', 'loadmore', 'htoastx', 'sort', 'colmenu', 'togglecol', 'resetcols', 'quitsel', 'quit', 'force', 'copy', 'copyname', 'explain', 'no', 'gear', 'pause', 'step', 'setgraph', 'setcolor', 'sethist', 'setstrip', 'setalert', 'setsort', 'setpulse', 'setopen', 'setrows', 'settext', 'resetprefs']
 
   var DEFAULTS = { graph: 'smooth', color: 'heat', rate: 1000, hist: 60, strip: true, alert: true, sort: 'cpu', pulse: true, open: 'last', rows: 'default', text: 'default' }
   var HISTS = [60, 300, 900]
@@ -275,7 +275,7 @@
       chip('Processes', some(s.counts && s.counts.procs, Fmt.count))
     ]) + graph(layout, 'tot', 'cpu', 3, 1.2)
     var sec = windowSec()
-    html += '<div class="cnote">Cores · 0–100% · ' + span(sec) + '</div><div class="cspark' + (s.cores.length > 24 ? ' many' : '') + '">'
+    html += '<div class="cnote">Cores · 0–100% · ' + spanLabel(sec) + '</div><div class="cspark' + (s.cores.length > 24 ? ' many' : '') + '">'
     s.cores.forEach(function (core, i) {
       html += '<div class="cs"><span class="cl">' + esc(core.label) + '</span><div class="grow">' + plot('core' + i, 'cpu', false, span(), true) + '</div><span class="cp num">' + Fmt.pct(s.loads[i]) + '</span></div>'
     })
@@ -795,9 +795,12 @@
     var a = document.activeElement
     if (!a || !root.contains(a)) return null
     if (a.matches('input[data-q]')) return { input: true, at: a.selectionStart }
+    if (a.matches('.hs')) return { selector: '.hs' }
+    var role = a.getAttribute('role')
+    var scope = role ? '[role="' + role + '"]' : ':not([role])'
     for (var i = 0; i < FOCUS_KEYS.length; i++) {
       var attr = 'data-' + FOCUS_KEYS[i]
-      if (a.hasAttribute(attr)) return { selector: '[' + attr + '="' + a.getAttribute(attr) + '"]' }
+      if (a.hasAttribute(attr)) return { selector: scope + '[' + attr + '="' + a.getAttribute(attr).replace(/["\\]/g, '\\$&') + '"]' }
     }
     return null
   }
@@ -810,7 +813,7 @@
       return
     }
     var el = root.querySelector(key.selector)
-    if (el) el.focus()
+    if (el) el.focus({ preventScroll: true })
   }
 
   function render() {
@@ -835,7 +838,7 @@
         var current = keys.indexOf(prefs.tab) < 0 ? 'all' : prefs.tab
         tabs = '<div class="tabs" role="tablist">' + keys.map(function (k) {
           var on = k === current
-          return '<a data-tab="' + k + '" role="tab" aria-selected="' + on + '" aria-label="' + NAMES[k] + '" data-name="' + NAMES[k] + '" class="' + (on ? 'on' : '') + '" tabindex="0">' + icon(ICONS[k]) + (on ? NAMES[k] : '') + '</a>'
+          return '<a data-tab="' + k + '" role="tab" aria-selected="' + on + '" aria-label="' + NAMES[k] + '" data-name="' + NAMES[k] + '" class="' + (on ? 'on' : '') + '" tabindex="0">' + icon(ICONS[k]) + (on ? '<span class="tl">' + NAMES[k] + '</span>' : '') + '</a>'
         }).join('') + '</div>'
         if (current === 'all') { layout.all = true; body = allView(list) }
         else { layout.page = true; body = section(list.filter(function (s) { return s[0] === current })[0]) }
@@ -878,7 +881,7 @@
     drawAll(view.paused ? 1 : (performance.now() - data.at) / prefs.rate)
   }
 
-  function span(sec) {
+  function spanLabel(sec) {
     if (sec < 90) return 'last ' + Math.round(sec) + 's'
     if (sec < 5400) return 'last ' + Math.round(sec / 60) + ' min'
     return 'last ' + (sec / 3600).toFixed(1) + ' h'
@@ -907,7 +910,7 @@
       top = short(max) + '/s'
       mid = short(max / 2) + '/s'
     }
-    return { top: top, mid: mid, span: withSpan ? span(windowSec()) : null }
+    return { top: top, mid: mid, span: withSpan ? spanLabel(windowSec()) : null }
   }
 
   function syncBg() {
@@ -1382,7 +1385,13 @@
       view.dragged = true
       setTimeout(function () { view.dragged = false }, 0)
       if (g.before !== g.key) {
-        var next = g.before === null ? null : g.before
+        var next = g.before
+        if (next === null) {
+          var shown = view.fitted.filter(function (k) { return k !== g.key })
+          var rest = prefs.cols.filter(function (k) { return k !== g.key })
+          var at = shown.length ? rest.indexOf(shown[shown.length - 1]) : -1
+          next = at >= 0 && at + 1 < rest.length ? rest[at + 1] : null
+        }
         prefs.cols = Cols.move(prefs.cols, g.key, next)
         savePrefs()
       }

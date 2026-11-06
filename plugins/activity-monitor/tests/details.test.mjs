@@ -57,6 +57,12 @@ test('pmset battery and sleep assertions', () => {
   assert.deepEqual(D.parsePmsetBatt("Now drawing from 'AC Power'\n -InternalBattery-0 (id=1)\t100%; charged; 0:00 remaining present: true\n"), { percent: 100, state: 'charged', source: 'AC Power', remaining: '0:00' })
   assert.equal(D.parsePmsetBatt("Now drawing from 'AC Power'\n"), null)
   assert.deepEqual([...D.parseAssertions(fixture('mac-assertions.txt'))], [975])
+  assert.deepEqual([...D.parseAssertions('   pid 4321(Google Chrome Helper (Renderer)): [0x1] 00:01:00 PreventUserIdleDisplaySleep named: "x"\n   pid 9(plain): [0x2] 00:00:01 PreventSystemSleep named: "y"')], [4321, 9])
+  assert.deepEqual([...D.parseAssertions('   pid 5(no match here): [0x1] named: "z"')], [])
+  assert.deepEqual([...D.parseAssertions('pid 1(a): x\n pid 2(b): PreventSystemSleep')], [2])
+  const started = Date.now()
+  D.parseAssertions('pid 1(x): '.repeat(3000))
+  assert.ok(Date.now() - started < 500)
 })
 
 test('macOS disk operations and interface packets', () => {

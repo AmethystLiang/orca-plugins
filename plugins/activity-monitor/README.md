@@ -7,7 +7,8 @@ A live system monitor in Orca's right sidebar: CPU cores, memory, network, disk,
 - **All** shows every section in one scroll. Each section also has its own tab, where its graphs fill the whole panel.
 - **CPU** shows a bar per core on All and a graph per core on its page. Apple silicon and hybrid Intel cores are labeled P and E.
 - **Processes** can be filtered and sorted, and loads more rows as you scroll, so you can reach every process. To quit one, hover its row and press ×. It asks first, and it refuses Orca itself and system processes.
-- **Settings** (the gear) switches graphs between Smooth and Pixel, color between Heat and your Orca theme (Theme recolors everything, including the health strip, which ramps from your theme's primary color to its destructive color), and refresh between 1, 2 and 5 seconds.
+- **What is this?** (right-click a process) sends a question about that process to one of your running agents, so it can explain what the process is.
+- **Settings** (the gear) groups everything below. **Reset to defaults** puts them all back.
 
 ## Lock-up warnings
 
@@ -23,7 +24,22 @@ The strip at the bottom of the panel shows one word on a five-step scale, with a
 
 The badge keeps the worker running while the sidebar is closed, so warnings still fire. It's hidden below Critical. Windows has no pressure or swap reading, so there it goes by memory percent alone.
 
-It runs as a trusted worker because it reads system counters and lists processes, so Orca asks you to approve it on install. It makes no network connections and keeps its settings only in your copy of Orca.
+## Settings
+
+- **Graphs**: style (Smooth or Pixel), color (Heat, or Theme to recolor everything, including the health strip, from your theme's primary color to its destructive color), history (1m, 5m or 15m), and refresh (a stepper from 100ms to 10s, also in the footer). Pixel draws every graph, bar and the health level blocks as braille dots. Fast refresh uses more CPU.
+- **Health**: the health strip on or off (it still shows at Strained or Critical), and the memory alert on or off. The memory alert only hides the pop-up inside the panel; the macOS notification at Critical still appears.
+- **Processes**: default sort (CPU, Memory or Name), and pulse on change, which flashes numbers that jump.
+- **General**: what the panel opens on (Last, All or Processes), text size (Small, Default or Large), and table rows (Compact, Default or Comfortable).
+
+## Permissions
+
+It runs as a trusted worker because it reads system counters and lists processes, so Orca asks you to approve it on install. It asks for three capabilities:
+
+- **Show notifications** (`notifications:show`): sends the desktop notification when memory stays critical, so it reaches you when Orca is in the background.
+- **Read agents** (`agent:read`): lists your running agents so **What is this?** can pick one to ask.
+- **Send to terminals** (`terminal:send`): types the **What is this?** question into that agent's terminal. It only does this when you choose it.
+
+It makes no network connections and keeps its settings only in your copy of Orca.
 
 ## What each system shows
 

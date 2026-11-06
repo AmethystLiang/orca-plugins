@@ -209,19 +209,38 @@ export function createSampler(options: SamplerOptions = {}) {
     return sample
   }
 
-  async function judge(sample: Sample): Promise<void> {
+  function announce(): void {
+    if (alertSink) for (const alert of health.alerts()) alertSink(alert)
+  }
+
+  function blame(list: Proc[] | null): void {
+    health.setCulprit(culpritOf(list, { selfPids, protectedNames: provider.protectedNames }))
+  }
+
+  function judge(sample: Sample): void {
     const { level, escalated } = health.push({ at: clock(), total: sample.total, memory: sample.memory, swap: sample.swap, swapTotal: sample.swapTotal, pressure: sample.pressure })
-    if (level === 'risk' || level === 'crit') {
-      const list = await procs.ready().catch(() => null)
-      health.setCulprit(culpritOf(list, { selfPids, protectedNames: provider.protectedNames }))
+    if (level !== 'risk' && level !== 'crit') {
+      if (escalated) announce()
+      return
     }
-    if (escalated && alertSink) for (const alert of health.alerts()) alertSink(alert)
+    const cached = procs.peek()
+    if (cached) {
+      blame(cached)
+      if (escalated) announce()
+      return
+    }
+    procs.ready().then((list) => {
+      blame(list)
+      if (escalated) announce()
+    }).catch(() => undefined)
   }
 
   function next(): Promise<Sample> {
     if (!pending) {
-      pending = take().then(async (sample) => {
-        await judge(sample).catch(() => undefined)
+      pending = take().then((sample) => {
+        try {
+          judge(sample)
+        } catch {}
         return sample
       }).finally(() => {
         pending = null
@@ -280,7 +299,7 @@ export function createSampler(options: SamplerOptions = {}) {
     if (provider.protectedNames.test(name)) return { ok: false, reason: 'Protected system process' }
     const current = await provider.identify(pid)
     if (!current) return { ok: false, reason: 'Already gone' }
-    if (current.name !== name || (start && current.start && current.start !== start)) {
+    if (current.name !== name || (current.start || null) !== (start || null)) {
       return { ok: false, reason: 'That process changed; try again' }
     }
     return provider.quit(pid, force)

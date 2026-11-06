@@ -38,12 +38,16 @@
   }
 
   function fit(order, width) {
-    var used = 0
+    var used = BY.name.width
     var out = []
+    var full = false
     order.forEach(function (k) {
+      if (k === 'name') { out.push(k); return }
+      if (full) return
       var w = BY[k].width
-      if (k === 'name' || used + w <= width) { out.push(k); used += w }
+      if (used + w <= width) { out.push(k); used += w } else { full = true }
     })
+    if (out.indexOf('name') < 0) out.splice(Math.min(1, out.length), 0, 'name')
     return out
   }
 
