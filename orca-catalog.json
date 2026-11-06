@@ -44,6 +44,56 @@
           ]
         }
       ]
+    },
+    {
+      "id": "aamonnaig4.putt-request",
+      "source": {
+        "kind": "git",
+        "url": "https://github.com/aamonnaig4/orca-plugins.git",
+        "ref": "main",
+        "path": "plugins/putt-request"
+      },
+      "description": "Pixel-art mini golf for the wait between agents, with a private leaderboard.",
+      "categories": [
+        "games"
+      ],
+      "releases": [
+        {
+          "version": "1.0.0",
+          "commit": "12d95b081f3549c799db9c1105a077f1c743d90c",
+          "contentHash": "318b7fe17c446996a17540a2c08634d33deb7404af0867e9049f364a1927a90b",
+          "execution": "sandboxed-ui",
+          "minimumOrca": "1.4.246",
+          "name": "Putt Request",
+          "contributes": [
+            {
+              "kind": "panels",
+              "name": "Putt Request"
+            }
+          ],
+          "capabilities": [
+            "storage:own"
+          ],
+          "images": {
+            "cover": {
+              "path": "plugins/putt-request/media/cover.png",
+              "alt": "The title Putt Request above three pixel-art mini golf holes on a dark starfield",
+              "sha256": "f20d2406960bc2bff59558b1da7ec233de43a3d96dea85a0171049ecc00486de",
+              "width": 1600,
+              "height": 1000
+            },
+            "screenshots": [
+              {
+                "path": "plugins/putt-request/media/screens.png",
+                "alt": "Three screens: the game library, a putt being lined up on the hole Off By One, and the private leaderboard",
+                "sha256": "e4fb3b3af499c44414c7f04a18b90bbd43efb152f7a5e2b6fbc9849babd24e99",
+                "width": 1600,
+                "height": 1000
+              }
+            ]
+          }
+        }
+      ]
     }
   ]
 }
