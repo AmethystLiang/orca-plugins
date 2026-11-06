@@ -20,7 +20,7 @@ export type NowPlaying = {
 }
 
 export type Row = {
-  kind: 'track' | 'artist' | 'album' | 'playlist'
+  kind: 'track' | 'artist' | 'album' | 'playlist' | 'liked' | 'dj' | 'daylist'
   id: string
   uri: string
   name: string
@@ -34,6 +34,8 @@ export type PlayerView =
   | { status: 'error'; message: string }
 
 export type ListView = { rows: Row[]; message: string | null }
+
+export type LibraryView = { made: Row[]; playlists: Row[]; artists: Row[]; albums: Row[]; needsReauth: boolean; message: string | null }
 
 export type SearchView = { songs: Row[]; artists: Row[]; albums: Row[]; playlists: Row[]; message: string | null }
 
@@ -53,6 +55,7 @@ export type Command =
   | { action: 'playContext'; contextUri: string; offsetUri?: string }
   | { action: 'playTrack'; uri: string }
   | { action: 'queue'; uri: string }
+  | { action: 'dj' }
 
 export type CommandResult = { ok: true } | { ok: false; message: string }
 

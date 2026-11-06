@@ -2,7 +2,7 @@
   "manifestVersion": 2,
   "id": "now-playing",
   "name": "Now Playing",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "execution": "trusted-worker",
   "description": "Control Spotify from Orca: now playing, controls, search, playlists, queue and devices, in the sidebar. Needs Spotify Premium and a free Spotify developer app of your own.",
   "license": "MIT",
@@ -47,12 +47,12 @@
   ],
   "cover": {
     "path": "media/cover.png",
-    "alt": "Now Playing in Orca's sidebar: a song with its cover art, the device menu open with volume, and search results"
+    "alt": "Now Playing in Orca's sidebar: a song with its cover art, the device menu open with volume, and the Library with Liked Songs, DJ and daylist"
   },
   "screenshots": [
     {
       "path": "media/screens.png",
-      "alt": "Three panels: the Playlists tab, Search results for lantern, and the Queue"
+      "alt": "Three panels: the Library with Made for you and playlists, search results for lantern, and the Queue"
     }
   ]
 }

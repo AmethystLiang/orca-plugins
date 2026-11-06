@@ -1,11 +1,15 @@
 import type { OrcaWorkerApi } from 'orca/worker'
 import { createServer, type Server } from 'node:http'
+import { execFile } from 'node:child_process'
 import { SpotifyClient, SpotifyError, type FetchFn } from './client'
-import type { AuthStart, CommandResult, Device, ListView, PlayerView, QueueView, Row, SearchView } from './protocol'
+import type { AuthStart, CommandResult, Device, LibraryView, ListView, PlayerView, QueueView, Row, SearchView } from './protocol'
 import {
   authorizeUrl,
   base64url,
   commandCall,
+  daylistUri,
+  DJ_URI,
+  followedArtistRows,
   parseCommand,
   parseDevices,
   parsePlayer,
@@ -13,6 +17,7 @@ import {
   REDIRECT_PORT,
   REDIRECT_URI,
   rows,
+  savedAlbumRows,
   searchRows,
   trackRow
 } from './spotify'
@@ -20,10 +25,12 @@ import {
 export const REFRESH_KEY = 'refreshToken'
 const AUTH_WAIT_MS = 10 * 60_000
 const IMAGE_CACHE_MAX = 400
+const IMAGE_BATCH = 12
 const IMAGE_HOST = /^https:\/\/([a-z0-9-]+\.)*(scdn\.co|spotifycdn\.com)\//i
 const STARTS_PLAYBACK = new Set(['play', 'playContext', 'playTrack'])
 
-export type WorkerDeps = { fetch: FetchFn; now: () => number; listen: typeof createServer }
+export type RunFn = (file: string, args: readonly string[]) => Promise<void>
+export type WorkerDeps = { fetch: FetchFn; now: () => number; listen: typeof createServer; run: RunFn; platform: string }
 
 const message = (error: unknown): string => (error instanceof SpotifyError ? error.message : 'Could not reach Spotify. Check your connection.')
 
@@ -68,7 +75,6 @@ export function startWorker(orca: OrcaWorkerApi, deps: WorkerDeps): { dispose():
       return null
     }
   }
-  const withImages = (list: Row[]): Promise<Row[]> => Promise.all(list.map(async (row) => ({ ...row, cover: await image(row.cover) })))
 
   const liked = new Map<string, boolean>()
   let pending: { server: Server; timer: unknown } | null = null
@@ -158,6 +164,14 @@ export function startWorker(orca: OrcaWorkerApi, deps: WorkerDeps): { dispose():
     return { url: authorizeUrl(clientId.trim(), challenge, state) }
   })
 
+  orca.panels.handle('images.get', async (input): Promise<Record<string, string | null>> => {
+    const urls = (input as { urls?: unknown } | null)?.urls
+    if (!Array.isArray(urls)) return {}
+    const wanted = urls.filter((url): url is string => typeof url === 'string').slice(0, IMAGE_BATCH)
+    const found = await Promise.all(wanted.map(async (url) => [url, await image(url)] as const))
+    return Object.fromEntries(found)
+  })
+
   orca.panels.handle('auth.signOut', async (): Promise<{ ok: true }> => {
     stopPending()
     liked.clear()
@@ -168,6 +182,15 @@ export function startWorker(orca: OrcaWorkerApi, deps: WorkerDeps): { dispose():
   orca.panels.handle('command', async (input): Promise<CommandResult> => {
     const command = parseCommand(input)
     if (!command) return { ok: false, message: 'That control did not work.' }
+    if (command.action === 'dj') {
+      if (deps.platform !== 'darwin') return { ok: false, message: 'DJ can only start on a Mac.' }
+      try {
+        await deps.run('osascript', ['-e', 'set prior to path to frontmost application as text', '-e', `tell application "Spotify" to play track "${DJ_URI}"`, '-e', 'delay 0.4', '-e', 'tell application prior to activate', '-e', 'delay 0.8', '-e', 'tell application prior to activate'])
+        return { ok: true }
+      } catch {
+        return { ok: false, message: 'Could not start DJ. Is the Spotify app installed on this Mac?' }
+      }
+    }
     try {
       let deviceId: string | null = null
       if (STARTS_PLAYBACK.has(command.action)) {
@@ -185,24 +208,69 @@ export function startWorker(orca: OrcaWorkerApi, deps: WorkerDeps): { dispose():
     }
   })
 
-  orca.panels.handle('playlists.get', async (): Promise<ListView> => {
+  const optional = async (path: string): Promise<{ body: unknown; denied: boolean }> => {
     try {
-      const body = (await client.get('/me/playlists?limit=50')) as { items?: unknown } | null
-      return { rows: await withImages(rows(body?.items, playlistRow)), message: null }
+      return { body: await client.get(path), denied: false }
     } catch (error) {
-      return { rows: [], message: message(error) }
+      if (error instanceof SpotifyError && error.status === 403) return { body: null, denied: true }
+      throw error
+    }
+  }
+
+  orca.panels.handle('library.get', async (): Promise<LibraryView> => {
+    const empty: LibraryView = { made: [], playlists: [], artists: [], albums: [], needsReauth: false, message: null }
+    try {
+      const [me, lists, likedSongs, albums, artists, recent] = await Promise.all([
+        client.get('/me'),
+        client.get('/me/playlists?limit=50'),
+        optional('/me/tracks?limit=1'),
+        optional('/me/albums?limit=50'),
+        optional('/me/following?type=artist&limit=50'),
+        optional('/me/player/recently-played?limit=50')
+      ])
+      const userId = (me as { id?: unknown } | null)?.id
+      const made: Row[] = []
+      if (typeof userId === 'string' && /^[A-Za-z0-9._-]{1,64}$/.test(userId)) {
+        const total = (likedSongs.body as { total?: unknown } | null)?.total
+        made.push({ kind: 'liked', id: 'liked', uri: `spotify:user:${userId}:collection`, name: 'Liked Songs', sub: typeof total === 'number' ? `${total} ${total === 1 ? 'song' : 'songs'}` : 'Playlist', cover: null })
+      }
+      if (deps.platform === 'darwin') made.push({ kind: 'dj', id: 'dj', uri: DJ_URI, name: 'DJ', sub: 'Plays in the Spotify app on this Mac', cover: null })
+      const daylist = daylistUri(recent.body)
+      if (daylist) made.push({ kind: 'daylist', id: daylist.split(':')[2], uri: daylist, name: 'daylist', sub: 'Made for you · changes through the day', cover: null })
+      return {
+        made,
+        playlists: (rows((lists as { items?: unknown } | null)?.items, playlistRow)),
+        artists: (followedArtistRows(artists.body)),
+        albums: (savedAlbumRows(albums.body)),
+        needsReauth: likedSongs.denied || albums.denied || artists.denied || recent.denied,
+        message: null
+      }
+    } catch (error) {
+      return { ...empty, message: message(error) }
     }
   })
 
-  orca.panels.handle('playlist.tracks', async (input): Promise<ListView> => {
+  const TRACK_PATHS: Record<string, (id: string) => string> = {
+    playlist: (id) => `/playlists/${id}/tracks?limit=100`,
+    album: (id) => `/albums/${id}/tracks?limit=50`,
+    artist: (id) => `/artists/${id}/top-tracks?market=from_token`,
+    liked: () => '/me/tracks?limit=50'
+  }
+
+  orca.panels.handle('tracks.get', async (input): Promise<ListView> => {
+    const kind = (input as { kind?: unknown } | null)?.kind
     const id = (input as { id?: unknown } | null)?.id
-    if (typeof id !== 'string' || !/^[A-Za-z0-9]{1,64}$/.test(id)) return { rows: [], message: 'That playlist did not open.' }
+    const path = typeof kind === 'string' ? TRACK_PATHS[kind] : undefined
+    if (!path || typeof id !== 'string' || !/^[A-Za-z0-9]{1,64}$/.test(id)) return { rows: [], message: 'That did not open.' }
     try {
-      const body = (await client.get(`/playlists/${id}/tracks?limit=100`)) as { items?: unknown } | null
-      return { rows: await withImages(rows(body?.items, trackRow)), message: null }
+      const body = (await client.get(path(id))) as { items?: unknown; tracks?: unknown } | null
+      return { rows: (rows(kind === 'artist' ? body?.tracks : body?.items, trackRow)), message: null }
     } catch (error) {
-      if (error instanceof SpotifyError && (error.status === 403 || error.status === 404)) {
+      if (kind === 'playlist' && error instanceof SpotifyError && (error.status === 403 || error.status === 404)) {
         return { rows: [], message: "Spotify doesn't let apps list this playlist's songs. The play button still plays it." }
+      }
+      if (kind === 'artist' && error instanceof SpotifyError && (error.status === 403 || error.status === 404)) {
+        return { rows: [], message: "Spotify doesn't let apps list this artist's top songs. The play button still plays them." }
       }
       return { rows: [], message: message(error) }
     }
@@ -216,10 +284,10 @@ export function startWorker(orca: OrcaWorkerApi, deps: WorkerDeps): { dispose():
       const body = await client.get(`/search?q=${encodeURIComponent(query.trim().slice(0, 200))}&type=track,artist,album,playlist&limit=5`)
       const found = searchRows(body)
       return {
-        songs: await withImages(found.songs),
-        artists: await withImages(found.artists),
-        albums: await withImages(found.albums),
-        playlists: await withImages(found.playlists),
+        songs: (found.songs),
+        artists: (found.artists),
+        albums: (found.albums),
+        playlists: (found.playlists),
         message: null
       }
     } catch (error) {
@@ -232,8 +300,7 @@ export function startWorker(orca: OrcaWorkerApi, deps: WorkerDeps): { dispose():
       const body = (await client.get('/me/player/queue')) as { currently_playing?: unknown; queue?: unknown } | null
       const now = trackRow(body?.currently_playing)
       const next = rows(body?.queue, trackRow).slice(0, 20)
-      const [nowRow] = now ? await withImages([now]) : [null]
-      return { now: nowRow, next: await withImages(next), message: null }
+      return { now, next, message: null }
     } catch (error) {
       return { now: null, next: [], message: message(error) }
     }
@@ -245,7 +312,11 @@ export function startWorker(orca: OrcaWorkerApi, deps: WorkerDeps): { dispose():
 let running: { dispose(): void } | null = null
 
 export default function activate(orca: OrcaWorkerApi): void {
-  running = startWorker(orca, { fetch: fetch as unknown as FetchFn, now: () => Date.now(), listen: createServer })
+  const run: RunFn = (file, args) =>
+    new Promise((resolve, reject) => {
+      execFile(file, args, { timeout: 10_000 }, (error) => (error ? reject(error) : resolve()))
+    })
+  running = startWorker(orca, { fetch: fetch as unknown as FetchFn, now: () => Date.now(), listen: createServer, run, platform: process.platform })
 }
 
 export function deactivate(): void {

@@ -41,12 +41,21 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--orca-ring, 
 .tabs button { flex: 1; text-align: center; padding: 4px 0; font-size: 11.5px; border-radius: 4px; color: var(--orca-muted-foreground, #8a8a8a); }
 .tabs button.on { background: var(--sp-track); color: var(--orca-foreground, inherit); }
 .searchbox { margin: 8px 12px 0; display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 6px; background: var(--sp-chip); }
+.searchbox .clear { width: 20px; height: 20px; border-radius: 50%; }
+.searchbox .clear .ic { width: 12px; height: 12px; }
+.searchbox .clear[hidden] { display: none; }
 .searchbox input { flex: 1; min-width: 0; border: 0; background: transparent; color: inherit; font: inherit; font-size: 12.5px; outline: none; }
 .list { padding: 6px 12px 12px; display: flex; flex-direction: column; gap: 2px; flex: 1; min-height: 0; overflow-y: auto; }
 .item { display: flex; align-items: center; gap: 8px; padding: 4px; border-radius: 5px; width: 100%; }
 .item:hover { background: var(--sp-hover); }
 .item .art { width: 32px; height: 32px; border-radius: 4px; flex: none; object-fit: cover; background: var(--sp-chip); }
 .item .art.round { border-radius: 50%; }
+.art.special { display: inline-flex; align-items: center; justify-content: center; color: #fff; }
+.art.special .ic { width: 15px; height: 15px; }
+.art.liked { background: linear-gradient(135deg, #4c1d95, #a5b4fc); }
+.art.dj { background: linear-gradient(135deg, #1d4ed8, #22d3ee); }
+.art.daylist { background: radial-gradient(circle at 50% 55%, #facc15, #60a5fa 75%); }
+.more { margin: 2px 4px 4px; align-self: flex-start; }
 .item .t { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .item .act { opacity: 0; } .item:hover .act, .item:focus-within .act { opacity: 1; }
 .item.now .t > span:first-child { color: var(--sp-ok); }
