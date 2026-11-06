@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Design options: CPU cores</title>
+<style>
+:root {
+  --app-bg: #ffffff;
+  --app-fg: #0a0a0a;
+  --app-muted: #737373;
+  --app-border: #e5e5e5;
+  --app-accent: #f0f0f0;
+  --app-danger: #dc2626;
+  --app-radius: 8px;
+  --app-font: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  --doc-bg: #f1efe9;
+  --doc-fg: #2b2a27;
+  --doc-muted: #8a877f;
+  --doc-pick: #16a34a;
+  --doc-font: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --doc-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --doc-surface: #ffffff;
+  --doc-line: #0002;
+  --doc-shadow: #0001;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --doc-bg: #161513;
+    --doc-fg: #e9e6df;
+    --doc-muted: #8f8b82;
+    --doc-pick: #22c55e;
+    --doc-surface: #211f1c;
+    --doc-line: #fff2;
+    --doc-shadow: #0006;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; padding: 24px 24px 220px; background: var(--doc-bg); color: var(--doc-fg); font: 14px/1.4 var(--doc-font); }
+header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 20px; }
+header h1 { font-size: 20px; margin: 0; }
+.round { font: 600 11px var(--doc-mono); background: var(--doc-fg); color: var(--doc-bg); padding: 3px 8px; border-radius: 99px; }
+.ledger { margin: 0 0 24px; padding: 10px 14px; border-left: 3px solid var(--doc-pick); background: var(--doc-surface); font-size: 13px; }
+.ledger div::before { content: "\2713  "; color: var(--doc-pick); font-weight: 700; }
+.issue { margin: 0 0 40px; }
+.issue h2 { font-size: 16px; margin: 0 0 4px; }
+.issue h2 .num { font-family: var(--doc-mono); color: var(--doc-muted); margin-right: 6px; }
+.said { color: var(--doc-muted); font-size: 12px; margin: 0 0 10px; }
+.said::before { content: "you: "; font-weight: 600; }
+.view { font-size: 12px; margin: 6px 0 0; color: var(--doc-muted); }
+.view::before { content: "my view: "; font-weight: 600; }
+.row { display: flex; gap: 16px; overflow-x: auto; padding: 6px 4px 10px; }
+.col { flex: 0 0 auto; position: relative; border-radius: 12px; padding: 8px; outline: 2px solid transparent; transition: outline-color .12s; }
+.col[data-opt] { cursor: pointer; }
+.col[data-opt]:hover { outline-color: var(--doc-line); }
+.col.picked { outline: 3px solid var(--doc-pick); background: color-mix(in srgb, var(--doc-pick) 8%, transparent); }
+.tick { display: none; position: absolute; top: -8px; right: -8px; width: 24px; height: 24px; border-radius: 50%; background: var(--doc-pick); color: #fff; font: 700 14px/24px var(--doc-font); text-align: center; }
+.col.picked .tick { display: block; }
+.cap { margin-top: 8px; font-size: 13px; max-width: 360px; }
+.cap .pick { font: 700 12px var(--doc-mono); background: var(--doc-fg); color: var(--doc-bg); padding: 1px 6px; border-radius: 4px; margin-right: 6px; }
+.cap .cost { display: block; color: var(--doc-muted); font-size: 12px; }
+.now .cap .pick { background: var(--doc-muted); }
+.screen { background: var(--app-bg); color: var(--app-fg); font-family: var(--app-font); border: 1px solid var(--app-border); border-radius: var(--app-radius); overflow: hidden; box-shadow: 0 6px 24px var(--doc-shadow); }
+.phone { width: 393px; min-height: 600px; border-radius: 44px; border: 10px solid #111; }
+textarea.notes { display: block; width: 100%; max-width: 760px; min-height: 40px; margin-top: 6px; padding: 8px; font: 13px var(--doc-font); border: 1px solid var(--doc-line); border-radius: 6px; background: var(--doc-surface); color: var(--doc-fg); resize: vertical; }
+details.archive { margin: 40px 0; color: var(--doc-muted); }
+#manual { margin-top: 48px; padding: 16px; background: var(--doc-surface); border: 1px dashed var(--doc-line); border-radius: 10px; max-width: 760px; }
+#manual h3 { margin: 0 0 8px; font-size: 14px; }
+#manual textarea { width: 100%; min-height: 90px; font: 13px var(--doc-mono); padding: 8px; border: 1px solid var(--doc-line); border-radius: 6px; background: var(--doc-bg); color: var(--doc-fg); }
+#legend { font: 12px var(--doc-mono); color: var(--doc-muted); margin: 10px 0 0; white-space: pre-wrap; user-select: all; }
+#bar { position: fixed; left: 0; right: 0; bottom: 0; background: #1c1b19f2; color: #eee; padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; font-size: 12px; z-index: 10; }
+#bar .grp { display: flex; gap: 4px; align-items: center; }
+#bar .grp b { font-family: var(--doc-mono); color: #aaa; margin-right: 2px; }
+#bar button { font: 600 12px var(--doc-mono); border: 1px solid #555; background: #2a2926; color: #ddd; padding: 3px 8px; border-radius: 5px; cursor: pointer; }
+#bar button.on { background: var(--doc-pick); border-color: var(--doc-pick); color: #fff; }
+#bar .actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+#bar input#line { width: 260px; font: 12px var(--doc-mono); background: #000; color: #fff; border: 1px solid #555; border-radius: 5px; padding: 4px 6px; }
+#bar #copy { background: #fff; color: #111; border-color: #fff; }
+#count { font-family: var(--doc-mono); color: #aaa; }
+#toast { color: #8f8; min-width: 60px; }
+.pl.hero { width: 367px; height: 400px; background: #000; color: #e6e6e6; font: 12px/1.35 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; display: flex; flex-direction: column; gap: 8px; padding: 10px; border-color: #262626; }
+.ic { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.h { display: flex; align-items: center; gap: 6px; flex: none; }
+.h b { font-weight: 600; }
+.h em { margin-left: auto; font-style: normal; color: #a3a3a3; }
+.ax { flex: 1; min-height: 60px; display: grid; grid-template-columns: 30px 1fr; grid-template-rows: 1fr 12px; font: 9px ui-monospace, Menlo, monospace; color: #a3a3a3; }
+.yl { display: flex; flex-direction: column; justify-content: space-between; text-align: right; padding-right: 4px; }
+.xl { grid-column: 2; display: flex; justify-content: space-between; }
+.cw { position: relative; flex: 1; min-height: 0; }
+.cw.bd { border-left: 1px solid #262626; border-bottom: 1px solid #262626; }
+.ch { position: absolute; inset: 0; width: 100%; height: 100%; }
+.minis { display: flex; gap: 3px; height: 22px; flex: none; }
+.minis span, .cols span { flex: 1; background: #141414; border-radius: 2px; display: flex; align-items: flex-end; overflow: hidden; }
+.minis i, .cols i { display: block; width: 100%; border-radius: 2px; }
+.cols { display: flex; gap: 4px; height: 96px; flex: none; }
+.cols > div { flex: 1; display: flex; flex-direction: column; align-items: stretch; gap: 3px; text-align: center; font: 9px ui-monospace, Menlo, monospace; }
+.cols em { font-style: normal; color: #e6e6e6; }
+.cols b { font-weight: 500; color: #a3a3a3; }
+.sparks { display: grid; grid-template-columns: repeat(5, 1fr); grid-auto-rows: 52px; gap: 6px; flex: none; }
+.sparks > div { display: flex; flex-direction: column; gap: 2px; border: 1px solid #1f1f1f; border-radius: 5px; padding: 3px; }
+.sl { display: flex; justify-content: space-between; font: 9px ui-monospace, Menlo, monospace; }
+.sl b { font-weight: 500; color: #a3a3a3; }
+.sl em { font-style: normal; }
+.hb { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 12px; flex: none; }
+.hb > div, .hm > div { display: grid; grid-template-columns: 18px 1fr 30px; align-items: center; gap: 5px; font: 10px ui-monospace, Menlo, monospace; }
+.hb b, .hm b { font-weight: 500; color: #a3a3a3; }
+.hb em, .hm em { font-style: normal; text-align: right; }
+.hb span { height: 9px; background: #141414; border-radius: 3px; overflow: hidden; }
+.hb i { display: block; height: 100%; border-radius: 3px; }
+.hm { display: flex; flex-direction: column; gap: 2px; flex: none; }
+.hm span { display: flex; gap: 1px; height: 8px; }
+.hm span i { flex: 1; border-radius: 1px; }
+.pl.hero { height: 300px; }
+.col .screen + .screen { margin-top: 10px; }
+.minis.many { gap: 1px; }
+.minis.many span { border-radius: 1px; }
+.hmap { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 1px; }
+.hr { flex: 1; display: flex; min-height: 0; }
+.hr i { flex: 1; }
+.hr:hover { outline: 1px solid #e6e6e6; outline-offset: -1px; }
+.bl { position: absolute; right: 3px; font: 9px ui-monospace, Menlo, monospace; background: rgba(0,0,0,.7); padding: 0 3px; border-radius: 3px; }
+.bl.top { top: 2px; color: #f87171; }
+.bl.bot { bottom: 2px; color: #4ade80; }
+</style>
+</head>
+<body data-key="design-options:am-cores:r2">
+
+<header>
+  <span class="round">ROUND 2</span>
+  <h1>Cores and chart overlap, up to 64</h1>
+</header>
+
+<div class="ledger">
+  <div>All page stays: hero + tiles, axes on every chart</div>
+</div>
+
+<section class="issue" data-issue="1">
+  <h2><span class="num">1</span>How do cores overlap the chart?</h2>
+  <p class="said">the 2 should overlap, we need to think about people who have CPUs with 64 cores</p>
+  <div class="row">
+    <div class="col now"><div class="screen pl hero" data-mock="now10"></div><div class="screen pl hero" data-mock="now64"></div><div class="cap"><span class="pick">NOW</span>Separate strip; 64 bars get thin</div></div>
+    <div class="col"><div class="screen pl hero" data-mock="1E10"></div><div class="screen pl hero" data-mock="1E64"></div><div class="cap"><span class="pick">1E</span>Core lines behind total<span class="cost">you asked · 64 lines read as a haze</span></div></div>
+    <div class="col"><div class="screen pl hero" data-mock="1F10"></div><div class="screen pl hero" data-mock="1F64"></div><div class="cap"><span class="pick">1F</span>Heatmap behind total<span class="cost">you asked · every core, every second</span></div></div>
+    <div class="col"><div class="screen pl hero" data-mock="1G10"></div><div class="screen pl hero" data-mock="1G64"></div><div class="cap"><span class="pick">1G</span>Busiest–idlest band<span class="cost">you asked · shows spread, not each core</span></div></div>
+  </div>
+  <p class="view">top screen: 10 cores · bottom: 64 cores · hover a 1F row to see its core</p>
+</section>
+
+<details class="archive">
+  <summary>Earlier rounds</summary>
+  <p>Round 1: 1A tall columns, 1B mini charts, 1C bars, 1D heatmap strip. You: the 2 should overlap; think about 64 cores.</p>
+</details>
+
+
+<section id="manual">
+  <h3>Manual copy</h3>
+  <textarea id="answer" readonly placeholder="Click options above. Your answer appears here."></textarea>
+  <div id="legend"></div>
+</section>
+
+<div id="bar">
+  <div id="groups" style="display:flex;flex-wrap:wrap;gap:10px 18px"></div>
+  <div class="actions">
+    <span id="count"></span>
+    <input id="line" readonly aria-label="Answer line">
+    <button id="copy">Copy my picks</button>
+    <button id="clear">Clear</button>
+    <span id="toast"></span>
+  </div>
+</div>
+
+<script>
+(function () {
+  var C = { green: '#4ade80', amber: '#fbbf24', red: '#f87171' }
+  function heat(v) { return v < 50 ? C.green : v < 80 ? C.amber : C.red }
+  function rnd(seed) { return function () { seed = (seed * 9301 + 49297) % 233280; return seed / 233280 } }
+  function cores(count, n) {
+    var r = rnd(count * 13 + 7), out = []
+    for (var c = 0; c < count; c++) {
+      var base = 20 + r() * 70, v = base, row = []
+      for (var i = 0; i < n; i++) { v += (r() - 0.5) * 24; v = Math.max(1, Math.min(100, v * 0.85 + base * 0.15)); row.push(v) }
+      out.push(row)
+    }
+    return out
+  }
+  function avg(rows) { return rows[0].map(function (_, i) { return rows.reduce(function (s, r) { return s + r[i] }, 0) / rows.length }) }
+  function path(vals) { var n = vals.length; return 'M' + vals.map(function (v, i) { return (i / (n - 1) * 100).toFixed(2) + ',' + (100 - v).toFixed(2) }).join(' L') }
+  var uid = 0
+  function grad() { var id = 'g' + (uid++); return [id, '<linearGradient id="' + id + '" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="' + C.green + '"/><stop offset=".6" stop-color="' + C.amber + '"/><stop offset=".9" stop-color="' + C.red + '"/></linearGradient>'] }
+  function frame(inner, count) {
+    return '<div class="h"><svg class="ic" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9" y="9" width="6" height="6"/></svg><b>CPU</b><em>' + count + ' cores</em></div>' +
+      '<div class="ax"><div class="yl"><span>100%</span><span>50%</span><span>0%</span></div><div class="cw bd">' + inner + '</div><div class="xl"><span>−89s</span><span>−45s</span><span>now</span></div></div>'
+  }
+  function total(vals) {
+    var g = grad()
+    return '<svg class="ch" viewBox="0 0 100 100" preserveAspectRatio="none"><defs>' + g[1] + '</defs><path d="M0,50H100" stroke="#262626" stroke-dasharray="2 3" vector-effect="non-scaling-stroke"/>' +
+      '<path d="' + path(vals) + ' L100,100 L0,100 Z" fill="rgba(251,191,36,.10)"/><path d="' + path(vals) + '" fill="none" stroke="url(#' + g[0] + ')" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>'
+  }
+  function strip(rows) {
+    var last = rows.map(function (r) { return r[r.length - 1] })
+    return '<div class="minis' + (rows.length > 20 ? ' many' : '') + '">' + last.map(function (v) { return '<span><i style="height:' + v + '%;background:' + heat(v) + '"></i></span>' }).join('') + '</div>'
+  }
+  function lines(rows) {
+    var op = rows.length > 20 ? 0.22 : 0.45
+    var w = rows.length > 20 ? 0.8 : 1
+    return '<svg class="ch" viewBox="0 0 100 100" preserveAspectRatio="none">' + rows.map(function (r) {
+      return '<path d="' + path(r) + '" fill="none" stroke="' + heat(r[r.length - 1]) + '" stroke-opacity="' + op + '" stroke-width="' + w + '" vector-effect="non-scaling-stroke"/>'
+    }).join('') + '</svg>'
+  }
+  function heatmap(rows) {
+    var sorted = rows.map(function (r, i) { return { r: r, i: i } })
+    return '<div class="hmap">' + sorted.map(function (o) {
+      return '<div class="hr" title="Core ' + (o.i + 1) + ' · ' + Math.round(o.r[o.r.length - 1]) + '%">' + o.r.filter(function (_, k) { return k % 2 === 0 }).map(function (v) {
+        return '<i style="background:' + heat(v) + ';opacity:' + (0.08 + v / 420).toFixed(2) + '"></i>'
+      }).join('') + '</div>'
+    }).join('') + '</div>'
+  }
+  function band(rows) {
+    var n = rows[0].length
+    var hi = [], lo = []
+    for (var i = 0; i < n; i++) { var col = rows.map(function (r) { return r[i] }); hi.push(Math.max.apply(null, col)); lo.push(Math.min.apply(null, col)) }
+    var top = hi.map(function (v, i) { return (i / (n - 1) * 100).toFixed(2) + ',' + (100 - v).toFixed(2) })
+    var bot = lo.map(function (v, i) { return (i / (n - 1) * 100).toFixed(2) + ',' + (100 - v).toFixed(2) }).reverse()
+    var last = rows.map(function (r, i) { return [r[n - 1], i] }).sort(function (a, b) { return b[0] - a[0] })
+    return '<svg class="ch" viewBox="0 0 100 100" preserveAspectRatio="none"><path d="M' + top.join(' L') + ' L' + bot.join(' L') + ' Z" fill="rgba(248,113,113,.13)"/>' +
+      '<path d="M' + top.join(' L') + '" fill="none" stroke="' + C.red + '" stroke-opacity=".5" stroke-width="1" stroke-dasharray="3 2" vector-effect="non-scaling-stroke"/>' +
+      '<path d="M' + bot.slice().reverse().join(' L') + '" fill="none" stroke="' + C.green + '" stroke-opacity=".5" stroke-width="1" stroke-dasharray="3 2" vector-effect="non-scaling-stroke"/></svg>' +
+      '<div class="bl top">busiest core ' + (last[0][1] + 1) + ' · ' + Math.round(last[0][0]) + '%</div><div class="bl bot">idlest core ' + (last[last.length - 1][1] + 1) + ' · ' + Math.round(last[last.length - 1][0]) + '%</div>'
+  }
+  var cache = {}
+  function data(count) { if (!cache[count]) cache[count] = cores(count, 60); return cache[count] }
+  function make(kind, count) {
+    var rows = data(count)
+    var t = total(avg(rows))
+    if (kind === 'now') return frame(t, count) + strip(rows)
+    if (kind === '1E') return frame(lines(rows) + t, count)
+    if (kind === '1F') return frame(heatmap(rows) + t, count)
+    return frame(band(rows) + t, count)
+  }
+  document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('[data-mock]').forEach(function (el) {
+      var m = /^(now|1E|1F|1G)(\d+)$/.exec(el.dataset.mock)
+      el.innerHTML = make(m[1], Number(m[2]))
+    })
+  })
+})()
+
+</script>
+<script>
+(function () {
+  var KEY = document.body.dataset.key || location.pathname;
+  var state = { picks: {}, notes: {} };
+  try {
+    var saved = JSON.parse(localStorage.getItem(KEY) || "{}");
+    state.picks = saved.picks || {};
+    state.notes = saved.notes || {};
+  } catch (e) {}
+
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+  function issueOf(code) { var m = /^(\d+)/.exec(code); return m ? m[1] : code; }
+
+  var issues = [];
+  var options = {};
+  var labels = {};
+  var cards = {};
+
+  document.querySelectorAll(".issue").forEach(function (sec) {
+    var id = sec.dataset.issue;
+    var title = sec.querySelector("h2");
+    labels[id] = title ? title.textContent.replace(/^\s*\d+\s*/, "").trim() : id;
+    issues.push(id);
+    options[id] = [];
+
+    sec.querySelectorAll(".col").forEach(function (col) {
+      var chip = col.querySelector(".cap .pick");
+      if (!chip) return;
+      var code = chip.textContent.trim();
+      if (!/^\d+[A-Za-z]/.test(code)) return;
+      var name = (chip.nextSibling && chip.nextSibling.textContent || "").trim();
+      col.dataset.opt = code;
+      var tick = document.createElement("span");
+      tick.className = "tick";
+      tick.textContent = "✓";
+      col.appendChild(tick);
+      col.addEventListener("click", function (ev) {
+        if (ev.target.closest("textarea, input, a, select")) return;
+        choose(code);
+      });
+      cards[code] = col;
+      options[id].push({ code: code, name: name });
+    });
+
+    if (sec.dataset.keep !== "drawn") options[id].push({ code: id + "-keep", name: "keep as-is" });
+
+    var ta = document.createElement("textarea");
+    ta.className = "notes";
+    ta.dataset.issue = id;
+    ta.placeholder = "Notes on " + id + ": what's off, or what would make it the one";
+    ta.value = state.notes[id] || "";
+    ta.addEventListener("input", function () {
+      if (ta.value.trim()) state.notes[id] = ta.value; else delete state.notes[id];
+      save();
+      render();
+    });
+    sec.appendChild(ta);
+  });
+
+  var groups = document.getElementById("groups");
+  issues.forEach(function (id) {
+    var g = document.createElement("div");
+    g.className = "grp";
+    var b = document.createElement("b");
+    b.textContent = id;
+    g.appendChild(b);
+    options[id].forEach(function (o) {
+      var btn = document.createElement("button");
+      btn.dataset.code = o.code;
+      btn.title = o.name;
+      btn.textContent = /-keep$/.test(o.code) ? "keep" : o.code.slice(id.length);
+      btn.addEventListener("click", function () {
+        choose(o.code);
+        if (cards[o.code]) cards[o.code].scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+      });
+      g.appendChild(btn);
+    });
+    groups.appendChild(g);
+  });
+
+  document.getElementById("legend").textContent = issues.map(function (id) {
+    return id + "  " + labels[id] + "\n" + options[id].map(function (o) {
+      return "    " + o.code + "  " + o.name;
+    }).join("\n");
+  }).join("\n");
+
+  function choose(code) {
+    var id = issueOf(code);
+    if (state.picks[id] === code) delete state.picks[id]; else state.picks[id] = code;
+    save();
+    render();
+  }
+
+  function answerLine() {
+    return issues.filter(function (id) { return state.picks[id]; })
+      .map(function (id) { return state.picks[id]; }).join("  ");
+  }
+
+  function fullAnswer() {
+    var out = answerLine();
+    var notes = issues.filter(function (id) { return state.notes[id] && state.notes[id].trim(); })
+      .map(function (id) { return id + " (" + labels[id] + "): " + state.notes[id].trim().replace(/\s*\n\s*/g, " / "); });
+    if (notes.length) out += "\n\n" + notes.join("\n");
+    return out;
+  }
+
+  function render() {
+    Object.keys(cards).forEach(function (code) {
+      cards[code].classList.toggle("picked", state.picks[issueOf(code)] === code);
+    });
+    document.querySelectorAll("#groups button").forEach(function (btn) {
+      btn.classList.toggle("on", state.picks[issueOf(btn.dataset.code)] === btn.dataset.code);
+    });
+    var n = issues.filter(function (id) { return state.picks[id]; }).length;
+    document.getElementById("count").textContent = n + " / " + issues.length;
+    document.getElementById("line").value = answerLine();
+    document.getElementById("answer").value = fullAnswer();
+  }
+
+  function flash(msg) {
+    var t = document.getElementById("toast");
+    t.textContent = msg;
+    setTimeout(function () { t.textContent = ""; }, 2500);
+  }
+
+  function fallbackCopy() {
+    var ta = document.getElementById("answer");
+    ta.focus();
+    ta.select();
+    var ok = false;
+    try { ok = document.execCommand("copy"); } catch (e) {}
+    if (ok) flash("copied");
+    else { ta.scrollIntoView({ block: "center" }); flash("press ⌘C"); }
+  }
+
+  document.getElementById("copy").addEventListener("click", function () {
+    var text = fullAnswer();
+    if (!text) { flash("nothing picked"); return; }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { flash("copied"); }, fallbackCopy);
+    } else fallbackCopy();
+  });
+
+  document.getElementById("clear").addEventListener("click", function () {
+    state = { picks: {}, notes: {} };
+    document.querySelectorAll("textarea.notes").forEach(function (ta) { ta.value = ""; });
+    save();
+    render();
+  });
+
+  ["line", "answer"].forEach(function (id) {
+    document.getElementById(id).addEventListener("focus", function (ev) { ev.target.select(); });
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
