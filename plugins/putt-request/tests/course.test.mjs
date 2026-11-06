@@ -2,7 +2,9 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { load } from './load.mjs'
 
-const { MiniGolfEngine: Engine, MiniGolfCourse: Course } = load('engine.js', 'course.js')
+const { MiniGolfEngine: Engine, MiniGolfCourses: Courses } = load('engine.js', 'course.js')
+const Course = Courses[0]
+const ALL = Courses.flatMap((course) => course.holes.map((hole, index) => [course.name + ' ' + (index + 1), hole]))
 
 function seeded(seed) {
   let state = seed
@@ -16,17 +18,19 @@ function run(ball, hole) {
   for (let i = 0; i < 12000 && ball.moving; i++) Engine.stepBall(ball, hole)
 }
 
-test('the course has nine named holes and the published par', () => {
-  assert.equal(Course.name, 'Main Branch')
-  assert.deepEqual([...Course.holes.map((hole) => hole.name)], ['Hello World', 'Rubber Duck', 'Off By One', 'Bottleneck', 'Left Join', 'Rollback', 'Merge Conflict', 'Stack Trace', 'Ship It'])
-  assert.equal(Course.holes.length, 9)
-  assert.equal(Course.par, 27)
+test('three courses of nine named holes, in unlock order, with their published pars', () => {
+  assert.deepEqual([...Courses.map((course) => course.name)], ['Main Branch', 'Feature Branch', 'Hotfix'])
+  assert.deepEqual([...Courses.map((course) => course.par)], [27, 28, 28])
+  assert.deepEqual([...Courses[0].holes.map((hole) => hole.name)], ['Hello World', 'Rubber Duck', 'Off By One', 'Bottleneck', 'Left Join', 'Rollback', 'Merge Conflict', 'Stack Trace', 'Ship It'])
+  assert.deepEqual([...Courses[1].holes.map((hole) => hole.name)], ['Fork', 'Rebase', 'Cherry Pick', 'Squash', 'Stash', 'Detached Head', 'Force Push', 'Code Review', 'Release'])
+  assert.deepEqual([...Courses[2].holes.map((hole) => hole.name)], ['Pager', 'Repro', 'Bisect', 'Patch', 'Hot Path', 'Revert', 'Canary', 'Postmortem', 'All Clear'])
+  assert.equal(new Set(Courses.map((course) => course.id)).size, 3)
 })
 
 const ASPECTS = [1.2, 1.47, 2, 2.6]
 
-for (const [index, source] of Course.holes.entries()) {
-  test('hole ' + (index + 1) + ' geometry places everything in play', () => {
+for (const [index, [label, source]] of ALL.entries()) {
+  test(label + ' geometry places everything in play', () => {
     for (const aspect of ASPECTS) {
       const hole = Engine.fitHole(source, aspect)
       for (const spot of [hole.tee, hole.cup, ...hole.bumpers, ...hole.sands]) {
@@ -39,7 +43,7 @@ for (const [index, source] of Course.holes.entries()) {
     }
   })
 
-  test('hole ' + (index + 1) + ' fills the panel at every shape', () => {
+  test(label + ' fills the panel at every shape', () => {
     for (const aspect of ASPECTS) {
       const hole = Engine.fitHole(source, aspect)
       const xs = hole.course.map((point) => point[0])
@@ -51,7 +55,7 @@ for (const [index, source] of Course.holes.entries()) {
     }
   })
 
-  test('hole ' + (index + 1) + ' keeps the ball in play and it always stops', () => {
+  test(label + ' keeps the ball in play and it always stops', () => {
     const random = seeded(index + 11)
     for (const aspect of ASPECTS) {
       const hole = Engine.fitHole(source, aspect)
@@ -68,7 +72,7 @@ for (const [index, source] of Course.holes.entries()) {
     }
   })
 
-  test('hole ' + (index + 1) + ' can be finished at par at every shape', () => {
+  test(label + ' can be finished at par at every shape', () => {
     const random = seeded(index + 101)
     for (const aspect of ASPECTS) {
       const hole = Engine.fitHole(source, aspect)
@@ -88,7 +92,7 @@ for (const [index, source] of Course.holes.entries()) {
 }
 
 test('resizing mid-hole keeps the ball in play', () => {
-  for (const source of Course.holes) {
+  for (const [, source] of ALL) {
     const tall = Engine.fitHole(source, 2.6)
     const short = Engine.fitHole(source, 1.2)
     const ball = Engine.createBall(tall)

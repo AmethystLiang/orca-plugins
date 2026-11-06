@@ -3,12 +3,13 @@
   const Engine = root.MiniGolfEngine
   const Save = root.MiniGolfSave
   const Render = root.MiniGolfRender
-  const COURSE = root.MiniGolfCourse
+  const COURSES = root.MiniGolfCourses
   const SAVE_KEY = 'save'
   const SINK_HOLD = 1.5
   const ICONS = {
     flag: '<path d="M4 22V4a1 1 0 0 1 .4-.8A6 6 0 0 1 8 2c3 0 5 2 7.333 2q2 0 3.067-.8A1 1 0 0 1 20 4v10a1 1 0 0 1-.4.8A6 6 0 0 1 16 16c-3 0-5-2-8-2a6 6 0 0 0-4 1.528"/>',
     left: '<path d="m15 18-6-6 6-6"/>',
+    unlock: '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>',
     lock: '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
     trophy: '<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>'
   }
@@ -31,50 +32,71 @@
   function persist() {
     orca.host.call('storage.set', { key: SAVE_KEY, value: state.save }).catch((error) => console.error('Putt Request could not save', error))
   }
+  function paletteFor(course) {
+    return Object.assign({}, state.palette, course.turf)
+  }
   function paintThumbnails() {
     app.querySelectorAll('canvas[data-hole]').forEach((canvas) => {
-      Render.paintThumbnail(canvas, COURSE.holes[Number(canvas.dataset.hole)], state.palette)
+      const course = COURSES[Number(canvas.dataset.course)]
+      Render.paintThumbnail(canvas, course.holes[Number(canvas.dataset.hole)], paletteFor(course))
     })
   }
   function leave() {
     state.game = null
   }
-  function card(action, hole, title, subtitle, extra) {
-    return '<button class="card" data-action="' + action + '"' + (extra || '') + '><canvas data-hole="' + hole + '"></canvas><b>' + title + '</b><small>' + subtitle + '</small></button>'
+  function thumb(courseIndex, hole) {
+    return '<canvas data-course="' + courseIndex + '" data-hole="' + hole + '"></canvas>'
+  }
+  function card(action, courseIndex, hole, title, subtitle, extra) {
+    return '<button class="card" data-action="' + action + '" data-course="' + courseIndex + '"' + (extra || '') + '>' + thumb(courseIndex, hole) + '<b>' + title + '</b><small>' + subtitle + '</small></button>'
+  }
+  function lockedCard(courseIndex) {
+    return '<div class="card locked" aria-disabled="true">' + thumb(courseIndex, 0) + '<span class="badge">' + icon('lock') + '</span><b>' + COURSES[courseIndex].name + '</b><small>Finish ' + COURSES[courseIndex - 1].name + '</small></div>'
   }
 
   function showLibrary() {
     leave()
     state.view = 'library'
     const save = state.save
-    const best = Save.bestCourse(save)
     let cards = ''
-    if (Save.endlessReady(save)) {
-      cards += card('endless', 1, 'Endless', COURSE.holes.length + ' holes · Best ' + Save.bestStreak(save))
+    if (Save.endlessReady(save, COURSES)) {
+      const pool = Save.endlessPool(save, COURSES).length
+      const total = Save.totalHoles(COURSES)
+      cards += card('endless', 0, 1, 'Endless', (pool < total ? pool + ' of ' + total : total) + ' holes · Best ' + Save.bestStreak(save))
     }
-    if (save.current !== null) {
-      cards += card('play', save.current, 'Continue', 'Hole ' + (save.current + 1) + ' · ' + COURSE.holes[save.current].name, ' data-hole-index="' + save.current + '"')
+    const lastIndex = COURSES.findIndex((course) => course.id === save.last)
+    const current = lastIndex === -1 ? null : Save.peek(save, COURSES[lastIndex]).current
+    if (current !== null) {
+      cards += card('play', lastIndex, current, 'Continue', COURSES[lastIndex].name + ' · Hole ' + (current + 1), ' data-hole-index="' + current + '"')
     }
-    cards += card('course', 0, COURSE.name, COURSE.holes.length + ' holes · ' + (best ? 'Best ' + best : 'Unplayed'))
+    COURSES.forEach((course, index) => {
+      if (!Save.courseOpen(save, COURSES, index)) {
+        cards += lockedCard(index)
+        return
+      }
+      const best = Save.bestCourse(save, course)
+      cards += card('course', index, 0, course.name, course.holes.length + ' holes · ' + (best ? 'Best ' + best : 'Unplayed'))
+    })
     app.innerHTML = '<div class="top">' + icon('flag') + '<span class="where">Putt Request</span><button class="iconbutton push" data-action="board" aria-label="Leaderboard" title="Leaderboard">' + icon('trophy') + '</button></div><div class="body"><div class="grid">' + cards + '</div></div>' + footer()
     paintThumbnails()
   }
 
-  function showCourse() {
+  function showCourse(courseIndex) {
     leave()
     state.view = 'course'
-    const save = state.save
-    const cells = COURSE.holes.map((_, index) => {
-      if (index >= save.unlocked) {
+    const course = COURSES[courseIndex]
+    const progress = Save.peek(state.save, course)
+    const cells = course.holes.map((_, index) => {
+      if (index >= progress.unlocked) {
         return '<div class="cell locked" aria-label="Hole ' + (index + 1) + ' locked"><span class="lock">' + icon('lock') + '</span><small>' + (index + 1) + '</small></div>'
       }
-      const strokes = save.round[index]
-      return '<button class="cell' + (index === save.current ? ' current' : '') + '" data-action="play" data-hole-index="' + index + '" title="' + COURSE.holes[index].name + '"><canvas data-hole="' + index + '"></canvas><small>' + (index + 1) + (strokes ? ' · ' + strokes : '') + '</small></button>'
+      const strokes = progress.round[index]
+      return '<button class="cell' + (index === progress.current ? ' current' : '') + '" data-action="play" data-course="' + courseIndex + '" data-hole-index="' + index + '" title="' + course.holes[index].name + '">' + thumb(courseIndex, index) + '<small>' + (index + 1) + (strokes ? ' · ' + strokes : '') + '</small></button>'
     }).join('')
-    const resume = save.current !== null ? save.current : 0
-    const label = save.current !== null && save.round.length ? 'Continue from hole ' + (resume + 1) : 'Start course'
-    const best = Save.bestCourse(save)
-    app.innerHTML = '<div class="top"><button class="iconbutton" data-action="library" aria-label="Back">' + icon('left') + '</button><span class="where">' + COURSE.name + '</span></div><div class="body"><small>' + COURSE.holes.length + ' holes · Par ' + COURSE.par + (best ? ' · Best ' + best : '') + '</small><div class="holes">' + cells + '</div><button class="primary" data-action="play" data-hole-index="' + resume + '">' + label + '</button></div>' + footer()
+    const resume = progress.current !== null ? progress.current : 0
+    const label = progress.current !== null && progress.round.length ? 'Continue from hole ' + (resume + 1) : 'Start course'
+    const best = Save.bestCourse(state.save, course)
+    app.innerHTML = '<div class="top"><button class="iconbutton" data-action="library" aria-label="Back">' + icon('left') + '</button><span class="where">' + course.name + '</span></div><div class="body"><small>' + course.holes.length + ' holes · Par ' + course.par + (best ? ' · Best ' + best : '') + '</small><div class="holes">' + cells + '</div><button class="primary" data-action="play" data-course="' + courseIndex + '" data-hole-index="' + resume + '">' + label + '</button></div>' + footer()
     paintThumbnails()
   }
 
@@ -85,28 +107,32 @@
     leave()
     state.view = 'board'
     const save = state.save
-    const top = save.courseBoard[0]
-    const streak = save.endlessBoard[0]
-    let stats = top ? stat(COURSE.name + ' best', top.total, formatPar(top.toPar) + ' · ' + formatDate(top.at)) : stat(COURSE.name + ' best', '–', 'Finish the course to post your first score.')
-    if (Save.endlessReady(save)) {
-      stats += streak ? stat('Endless best', streak.streak, 'in a row · ' + formatDate(streak.at)) : stat('Endless best', '–', 'No streak yet')
+    const all = Save.bestOfAll(save, COURSES)
+    const overall = all ? stat('Best of all courses', all.total, formatPar(all.toPar) + ' · ' + all.parts.join(' + ')) : stat('Best of all courses', '–', 'Finish all ' + COURSES.length + ' courses to post one.')
+    let endless = ''
+    if (Save.endlessReady(save, COURSES)) {
+      const streak = save.endlessBoard[0]
+      endless = '<div class="stats">' + (streak ? stat('Endless best', streak.streak, 'in a row · ' + formatDate(streak.at)) : stat('Endless best', '–', 'No streak yet')) + '</div>'
     }
-    const others = save.courseBoard.slice(1).map((entry, index) => '<li><span class="rank">' + (index + 2) + '</span><b>' + entry.total + '</b><span class="rank">' + formatPar(entry.toPar) + '</span><span class="rank when">' + formatDate(entry.at) + '</span></li>').join('')
-    app.innerHTML = '<div class="top"><button class="iconbutton" data-action="library" aria-label="Back">' + icon('left') + '</button><span class="where">Your leaderboard</span></div><div class="body"><div class="stats">' + stats + '</div>' + (others ? '<small class="other">Other rounds</small><ol class="board">' + others + '</ol>' : '') + '</div>' + footer()
+    app.innerHTML = '<div class="top"><button class="iconbutton" data-action="library" aria-label="Back">' + icon('left') + '</button><span class="where">Your leaderboard</span></div><div class="body"><div class="stats one">' + overall + '</div>' + endless + '</div>' + footer()
   }
 
-  function showFinished(result) {
+  function showFinished(courseIndex, result) {
     leave()
     state.view = 'finished'
-    const best = Save.bestCourse(state.save)
+    const course = COURSES[courseIndex]
+    const next = COURSES[courseIndex + 1]
+    const best = Save.bestCourse(state.save, course)
     const rankLine = result.rank === 1 ? 'New best' : result.rank ? 'Number ' + result.rank + ' on your board' : 'Best ' + best
-    app.innerHTML = '<div class="top"><button class="iconbutton" data-action="library" aria-label="Back">' + icon('left') + '</button><span class="where">' + COURSE.name + '</span></div><div class="body finished"><strong>' + result.total + '</strong><small>' + formatPar(result.toPar) + ' · ' + rankLine + '</small><button class="primary" data-action="play" data-hole-index="0">Play again</button><button class="secondary" data-action="board">Leaderboard</button></div>' + footer()
+    const again = '<button class="' + (result.firstFinish && next ? 'secondary' : 'primary') + '" data-action="play" data-course="' + courseIndex + '" data-hole-index="0">Play again</button>'
+    const unlocked = result.firstFinish && next ? '<span class="unlock">' + icon('unlock') + next.name + ' unlocked</span><button class="primary" data-action="play" data-course="' + (courseIndex + 1) + '" data-hole-index="0">Play ' + next.name + '</button>' : ''
+    app.innerHTML = '<div class="top"><button class="iconbutton" data-action="library" aria-label="Back">' + icon('left') + '</button><span class="where">' + course.name + '</span></div><div class="body finished"><strong>' + result.total + '</strong><small>' + formatPar(result.toPar) + ' · ' + rankLine + '</small>' + unlocked + again + '<button class="secondary" data-action="board">Leaderboard</button></div>' + footer()
   }
 
-  function startGame(hole, where, scoreHtml, events) {
-    app.innerHTML = '<div class="top"><button class="iconbutton" data-action="' + events.back + '" aria-label="Back">' + icon('left') + '</button><span class="where">' + where + '</span><span class="strokes push">' + strokesText(hole, 0) + '</span></div><div class="stage"><canvas class="field" aria-label="Golf hole. Drag back and release to putt."></canvas></div>' + footer(scoreHtml)
+  function startGame(hole, course, where, scoreHtml, events) {
+    app.innerHTML = '<div class="top"><button class="iconbutton" data-action="' + events.back + '"' + (events.backCourse !== undefined ? ' data-course="' + events.backCourse + '"' : '') + ' aria-label="Back">' + icon('left') + '</button><span class="where">' + where + '</span><span class="strokes push">' + strokesText(hole, 0) + '</span></div><div class="stage"><canvas class="field" aria-label="Golf hole. Drag back and release to putt."></canvas></div>' + footer(scoreHtml)
     const canvas = app.querySelector('canvas.field')
-    const game = { canvas, context: canvas.getContext('2d'), source: hole, hole: null, aspect: null, ball: null, aim: null, strokes: 0, sinkTime: null, message: '', scored: false, events, leftover: 0, background: null }
+    const game = { canvas, context: canvas.getContext('2d'), source: hole, course, palette: null, hole: null, aspect: null, ball: null, aim: null, strokes: 0, sinkTime: null, message: '', scored: false, events, leftover: 0, background: null }
     state.game = game
     sizeField()
     canvas.addEventListener('pointerdown', (event) => {
@@ -151,6 +177,7 @@
       game.hole = fitted
       game.aspect = ratio
     }
+    game.palette = paletteFor(game.course)
     const width = Math.max(120, Math.min(stage.clientWidth, stage.clientHeight / ratio))
     const dpr = Math.max(1, root.devicePixelRatio || 1)
     game.canvas.style.width = Math.round(width) + 'px'
@@ -160,50 +187,53 @@
     game.background = document.createElement('canvas')
     game.background.width = game.canvas.width
     game.background.height = game.canvas.height
-    Render.paintHole(game.background.getContext('2d'), game.hole, state.palette, Render.CELL)
+    Render.paintHole(game.background.getContext('2d'), game.hole, game.palette, Render.CELL)
     drawGame()
   }
   function drawGame() {
     const game = state.game
     if (!game || !game.background) return
     const shot = game.aim ? Engine.shotFromDrag(game.aim.start, game.aim.current) : null
-    Render.drawFrame(game.context, game.background, { ball: game.ball, shot, sinkTime: game.sinkTime, hole: game.hole, message: game.message }, state.palette)
+    Render.drawFrame(game.context, game.background, { ball: game.ball, shot, sinkTime: game.sinkTime, hole: game.hole, message: game.message }, game.palette)
   }
 
-  function playCourseHole(index) {
+  function playCourseHole(courseIndex, index) {
     state.view = 'play'
-    Save.startHole(state.save, index)
+    const course = COURSES[courseIndex]
+    Save.startHole(state.save, course, index)
     persist()
-    const hole = COURSE.holes[index]
-    startGame(hole, (index + 1) + '. ' + hole.name, coursePar(), {
+    const hole = course.holes[index]
+    startGame(hole, course, (index + 1) + '. ' + hole.name, coursePar(course), {
       back: 'course',
+      backCourse: courseIndex,
       sunk(game) {
-        game.result = Save.finishCourseHole(state.save, COURSE, index, game.strokes, Date.now())
+        game.result = Save.finishCourseHole(state.save, course, index, game.strokes, Date.now())
         game.message = game.strokes === 1 ? 'HOLE IN ONE' : 'HOLED IN ' + game.strokes
         persist()
-        if (!game.result.finished) app.querySelector('.score').innerHTML = coursePar()
+        if (!game.result.finished) app.querySelector('.score').innerHTML = coursePar(course)
       },
       done(game) {
-        if (game.result.finished) showFinished(game.result)
-        else if (state.save.current !== null) playCourseHole(state.save.current)
-        else showCourse()
+        const current = Save.peek(state.save, course).current
+        if (game.result.finished) showFinished(courseIndex, game.result)
+        else if (current !== null) playCourseHole(courseIndex, current)
+        else showCourse(courseIndex)
       }
     })
   }
-  function coursePar() {
-    return 'To par <b>' + formatPar(Save.toPar(state.save, COURSE)) + '</b>'
+  function coursePar(course) {
+    return 'To par <b>' + formatPar(Save.toPar(state.save, course)) + '</b>'
   }
   function endlessScore() {
     return 'Streak <b>' + state.save.endless.streak + '</b><span class="best"> · Best <b>' + Save.bestStreak(state.save) + '</b></span>'
   }
   function playEndless() {
     state.view = 'play'
-    const index = Save.nextEndlessHole(state.save, COURSE, Math.random)
-    const hole = COURSE.holes[index]
-    startGame(hole, hole.name, endlessScore(), {
+    const slot = Save.nextEndlessHole(state.save, COURSES, Math.random)
+    const { course, hole } = Save.holeAt(COURSES, slot)
+    startGame(hole, course, hole.name, endlessScore(), {
       back: 'library',
       sunk(game) {
-        const result = Save.finishEndlessHole(state.save, COURSE, game.strokes, Date.now())
+        const result = Save.finishEndlessHole(state.save, COURSES, game.strokes, Date.now())
         game.message = !result.madePar ? 'STREAK LOST' : game.strokes === 1 ? 'HOLE IN ONE' : 'HOLED IN ' + game.strokes
         persist()
         app.querySelector('.score').innerHTML = endlessScore()
@@ -219,10 +249,10 @@
     if (!target) return
     const action = target.dataset.action
     if (action === 'library') showLibrary()
-    else if (action === 'course') showCourse()
+    else if (action === 'course') showCourse(Number(target.dataset.course))
     else if (action === 'board') showBoard()
     else if (action === 'endless') playEndless()
-    else if (action === 'play') playCourseHole(Number(target.dataset.holeIndex))
+    else if (action === 'play') playCourseHole(Number(target.dataset.course), Number(target.dataset.holeIndex))
   })
 
   let last = performance.now()

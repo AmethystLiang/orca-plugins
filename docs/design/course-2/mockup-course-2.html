@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Design options: Putt Request composition</title>
+<style>
+:root {
+  --app-bg: #000000;
+  --app-fg: #e6e6e6;
+  --app-muted: #a3a3a3;
+  --app-border: #1f1f1f;
+  --app-accent: #1a1a1a;
+  --app-ring: #8c8c8c;
+  --app-radius: 8px;
+  --app-font: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  --doc-bg: #f1efe9;
+  --doc-fg: #2b2a27;
+  --doc-muted: #8a877f;
+  --doc-pick: #16a34a;
+  --doc-font: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --doc-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --doc-surface: #ffffff;
+  --doc-line: #0002;
+  --doc-shadow: #0001;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --doc-bg: #161513;
+    --doc-fg: #e9e6df;
+    --doc-muted: #8f8b82;
+    --doc-pick: #22c55e;
+    --doc-surface: #211f1c;
+    --doc-line: #fff2;
+    --doc-shadow: #0006;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; padding: 24px 24px 220px; background: var(--doc-bg); color: var(--doc-fg); font: 14px/1.4 var(--doc-font); }
+header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 20px; }
+header h1 { font-size: 20px; margin: 0; }
+.round { font: 600 11px var(--doc-mono); background: var(--doc-fg); color: var(--doc-bg); padding: 3px 8px; border-radius: 99px; }
+.ledger { margin: 0 0 24px; padding: 10px 14px; border-left: 3px solid var(--doc-pick); background: var(--doc-surface); font-size: 13px; }
+.ledger div::before { content: "\2713  "; color: var(--doc-pick); font-weight: 700; }
+.issue { margin: 0 0 40px; }
+.issue h2 { font-size: 16px; margin: 0 0 4px; }
+.issue h2 .num { font-family: var(--doc-mono); color: var(--doc-muted); margin-right: 6px; }
+.said { color: var(--doc-muted); font-size: 12px; margin: 0 0 10px; }
+.said::before { content: "you: "; font-weight: 600; }
+.view { font-size: 12px; margin: 6px 0 0; color: var(--doc-muted); }
+.view::before { content: "my view: "; font-weight: 600; }
+.row { display: flex; gap: 16px; overflow-x: auto; padding: 6px 4px 10px; }
+.col { flex: 0 0 auto; position: relative; border-radius: 12px; padding: 8px; outline: 2px solid transparent; transition: outline-color .12s; }
+.col[data-opt] { cursor: pointer; }
+.col[data-opt]:hover { outline-color: var(--doc-line); }
+.col.picked { outline: 3px solid var(--doc-pick); background: color-mix(in srgb, var(--doc-pick) 8%, transparent); }
+.tick { display: none; position: absolute; top: -8px; right: -8px; width: 24px; height: 24px; border-radius: 50%; background: var(--doc-pick); color: #fff; font: 700 14px/24px var(--doc-font); text-align: center; }
+.col.picked .tick { display: block; }
+.cap { margin-top: 8px; font-size: 13px; max-width: 300px; }
+.cap .pick { font: 700 12px var(--doc-mono); background: var(--doc-fg); color: var(--doc-bg); padding: 1px 6px; border-radius: 4px; margin-right: 6px; }
+.cap .cost { display: block; color: var(--doc-muted); font-size: 12px; }
+.now .cap .pick { background: var(--doc-muted); }
+.screen { background: var(--app-bg); color: var(--app-fg); font-family: var(--app-font); border: 1px solid var(--app-border); border-radius: var(--app-radius); overflow: hidden; box-shadow: 0 6px 24px var(--doc-shadow); }
+.phone { width: 393px; min-height: 600px; border-radius: 44px; border: 10px solid #111; }
+textarea.notes { display: block; width: 100%; max-width: 760px; min-height: 40px; margin-top: 6px; padding: 8px; font: 13px var(--doc-font); border: 1px solid var(--doc-line); border-radius: 6px; background: var(--doc-surface); color: var(--doc-fg); resize: vertical; }
+details.archive { margin: 40px 0; color: var(--doc-muted); }
+#manual { margin-top: 48px; padding: 16px; background: var(--doc-surface); border: 1px dashed var(--doc-line); border-radius: 10px; max-width: 760px; }
+#manual h3 { margin: 0 0 8px; font-size: 14px; }
+#manual textarea { width: 100%; min-height: 90px; font: 13px var(--doc-mono); padding: 8px; border: 1px solid var(--doc-line); border-radius: 6px; background: var(--doc-bg); color: var(--doc-fg); }
+#legend { font: 12px var(--doc-mono); color: var(--doc-muted); margin: 10px 0 0; white-space: pre-wrap; user-select: all; }
+#bar { position: fixed; left: 0; right: 0; bottom: 0; background: #1c1b19f2; color: #eee; padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; font-size: 12px; z-index: 10; }
+#bar .grp { display: flex; gap: 4px; align-items: center; }
+#bar .grp b { font-family: var(--doc-mono); color: #aaa; margin-right: 2px; }
+#bar button { font: 600 12px var(--doc-mono); border: 1px solid #555; background: #2a2926; color: #ddd; padding: 3px 8px; border-radius: 5px; cursor: pointer; }
+#bar button.on { background: var(--doc-pick); border-color: var(--doc-pick); color: #fff; }
+#bar .actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+#bar input#line { width: 260px; font: 12px var(--doc-mono); background: #000; color: #fff; border: 1px solid #555; border-radius: 5px; padding: 4px 6px; }
+#bar #copy { background: #fff; color: #111; border-color: #fff; }
+#count { font-family: var(--doc-mono); color: #aaa; }
+#toast { color: #8f8; min-width: 60px; }
+
+.names { margin: 8px 0 0; padding: 0 0 0 22px; columns: 2; font-size: 12px; color: var(--doc-muted); max-width: 300px; }
+.app { width: 300px; height: 500px; display: flex; flex-direction: column; font: 12px/1.35 var(--app-font); user-select: none; }
+.app button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: left; }
+.app small { color: var(--app-muted); font-size: 11px; }
+.app .icon { width: 13px; height: 13px; flex: none; display: block; }
+.app .top { flex: none; display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border-bottom: 1px solid var(--app-border); white-space: nowrap; }
+.app .where { font-weight: 600; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.app .push { margin-left: auto; }
+.app .strokes { color: var(--app-muted); font-variant-numeric: tabular-nums; }
+.app .iconbutton { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 4px; flex: none; }
+.app .iconbutton:hover { background: var(--app-accent); }
+.app .body { flex: 1; min-height: 0; overflow: hidden; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.app .stage { flex: 1; min-height: 0; display: flex; justify-content: center; align-items: center; overflow: hidden; }
+.app .foot { flex: none; display: flex; align-items: center; justify-content: space-between; height: 32px; padding: 0 10px; border-top: 1px solid var(--app-border); color: var(--app-muted); white-space: nowrap; }
+.app .foot b { color: var(--app-fg); font-weight: 600; }
+.app .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.app .card { position: relative; display: flex; flex-direction: column; gap: 2px; padding: 5px; border-radius: 7px; min-width: 0; }
+.app .card:hover, .app .cell:hover { background: var(--app-accent); }
+.app .card canvas { display: block; width: 100%; aspect-ratio: 1 / 1; object-fit: contain; border-radius: 4px; margin-bottom: 3px; }
+.app .card b { font-weight: 600; }
+.app .card b, .app .card small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.app .card.locked { cursor: default; }
+.app .card.locked:hover { background: none; }
+.app .card.locked canvas { filter: grayscale(1) brightness(.35); }
+.app .card.locked b { color: var(--app-muted); }
+.app .card .badge { position: absolute; left: 5px; right: 5px; top: 5px; aspect-ratio: 1 / 1; display: grid; place-items: center; color: var(--app-fg); }
+.app .card .badge .icon { width: 18px; height: 18px; }
+.app .holes { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: minmax(0, 1fr); gap: 5px; }
+.app .cell { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 3px; border-radius: 5px; min-height: 0; min-width: 0; }
+.app .cell canvas { width: 100%; flex: 1; min-height: 0; object-fit: contain; }
+.app .primary { flex: none; width: 100%; text-align: center; font-weight: 500; padding: 7px 12px; border-radius: 6px; background: var(--app-fg); color: var(--app-bg); }
+.app .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 2px 2px 12px; border-bottom: 1px solid var(--app-border); flex: none; }
+.app .stat { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.app .stat strong { font-size: 30px; line-height: 1.1; font-weight: 600; font-variant-numeric: tabular-nums; }
+.app .stat small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.app .other { margin: 6px 2px 0; }
+.app .board { list-style: none; margin: 0; padding: 0 2px; display: flex; flex-direction: column; }
+.app .board li { display: grid; grid-template-columns: 20px 34px 1fr auto; align-items: center; gap: 6px; height: 28px; }
+.app .board b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.app .rank { color: var(--app-muted); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.app .seg { display: flex; gap: 2px; padding: 2px; border: 1px solid var(--app-border); border-radius: 6px; flex: none; }
+.app .seg button { flex: 1; text-align: center; padding: 4px 6px; border-radius: 4px; color: var(--app-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.app .seg button.on { background: var(--app-accent); color: var(--app-fg); font-weight: 600; }
+.app canvas.field { display: block; width: 282px; height: 414px; }
+.app .finished { align-items: center; justify-content: center; text-align: center; }
+.app .finished strong { font-size: 44px; font-weight: 600; line-height: 1; }
+.app .secondary { flex: none; width: 100%; text-align: center; font-weight: 500; padding: 7px 12px; border-radius: 6px; border: 1px solid var(--app-border); }
+.app .unlock { display: flex; gap: 6px; align-items: center; margin: 6px 0 10px; font-weight: 600; }
+.app .stats.one { grid-template-columns: 1fr; }
+.app .stats.one strong { font-size: 44px; }
+h2.band { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--doc-muted); margin: 24px 0 4px; }
+.changed { margin: 28px 0 36px; padding: 12px 14px; background: var(--doc-surface); border-left: 3px solid #d97706; font-size: 13px; max-width: 900px; }
+.changed h3 { margin: 0 0 6px; font-size: 14px; }
+.changed div { margin: 3px 0; }
+.app.mini canvas.field { width: 204px; height: 299px; }
+.pair { display: flex; gap: 8px; }
+.app .body { overflow: hidden auto; }
+.app .seg button { flex: 1 1 auto; padding: 4px; }
+</style>
+</head>
+<body data-key="design-options:putt-course-2:r3">
+
+<header>
+  <span class="round">COMPOSITION</span>
+  <h1>Three courses, every pick applied</h1>
+</header>
+
+<div class="ledger">
+  <div>1A + 1C: Feature Branch and Hotfix join Main Branch</div>
+  <div>2-keep: no new hazards; layouts and turf carry it</div>
+  <div>3B: chain, each course unlocks the next</div>
+  <div>4D: Endless grows as you finish courses</div>
+</div>
+
+<h2 class="band">Library across a player's life</h2>
+<div class="row">
+  <div class="col"><div class="screen app" data-screen="lib-new"></div><div class="cap">New player</div></div>
+  <div class="col"><div class="screen app" data-screen="lib-mid"></div><div class="cap">Finished Main Branch</div></div>
+  <div class="col"><div class="screen app" data-screen="lib-done"></div><div class="cap">Finished all three</div></div>
+</div>
+
+<h2 class="band">Finish screen and courses</h2>
+<div class="row">
+  <div class="col"><div class="screen app" data-screen="finish"></div><div class="cap">Main Branch done<span class="cost">new: unlock line + next-course button</span></div></div>
+  <div class="col"><div class="screen app" data-screen="course" data-theme="fb"></div><ol class="names" data-names="fb"></ol></div>
+  <div class="col"><div class="screen app" data-screen="course" data-theme="hf"></div><ol class="names" data-names="hf"></ol></div>
+</div>
+
+<h2 class="band">On the green</h2>
+<div class="row">
+  <div class="col"><div class="screen app" data-screen="play" data-theme="fb" data-hole="2"></div><div class="cap">Feature Branch · 3</div></div>
+  <div class="col"><div class="screen app" data-screen="play" data-theme="hf" data-hole="4"></div><div class="cap">Hotfix · 5</div></div>
+  <div class="col"><div class="screen app" data-screen="play" data-theme="endless" data-hole="5"></div><div class="cap">Endless pulls a Hotfix hole</div></div>
+</div>
+
+<div class="changed">
+  <h3>What composition changed</h3>
+  <div><b>3B × finish screen:</b> finishing a course now says what it unlocked; primary button goes to the next course, "Play again" drops to secondary.</div>
+  <div><b>3B × 4D:</b> Endless appears with Feature Branch's unlock and adds 9 holes each time you finish a course.</div>
+  <div><b>Existing saves:</b> anyone who already finished Main Branch finds Feature Branch open on update.</div>
+  <div><b>2-keep:</b> Hotfix is told apart only by its clay turf and harder layouts.</div>
+</div>
+
+<section class="issue" data-issue="5">
+  <h2><span class="num">5</span>Which "best of all courses"?</h2>
+  <p class="said">best score of all coursed</p>
+  <div class="row">
+    <div class="col now">
+      <div class="screen app" data-screen="board-now"></div>
+      <div class="cap"><span class="pick">NOW</span>One course, one Endless</div>
+    </div>
+    <div class="col">
+      <div class="screen app" data-screen="board-each"></div>
+      <div class="cap"><span class="pick">5C</span>A best for each course<span class="cost">no round list; locked show –</span></div>
+    </div>
+    <div class="col">
+      <div class="screen app" data-screen="board-sum"></div>
+      <div class="cap"><span class="pick">5D</span>One combined best, 27 holes<span class="cost">blank until all three are finished</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="issue" data-issue="6" data-keep="drawn">
+  <h2><span class="num">6</span>Does the whole set look right?</h2>
+  <div class="row">
+    <div class="col"><div class="cap"><span class="pick">6A</span>Looks right, build it</div></div>
+    <div class="col"><div class="cap"><span class="pick">6B</span>Needs a fix (say in notes)</div></div>
+  </div>
+</section>
+
+<details class="archive">
+  <summary>Earlier rounds</summary>
+  <p>Course 1 picks: 1F 2A 5A 6A 8A 9B 10A 11C 12A 13A 14 Putt Request 15A 16A 17B</p>
+  <p>Round 1: 1A + 1C (Night Build dropped). Hazards, unlock, Endless, board redrawn for three courses.</p>
+  <p>Round 2: 2-keep (2D–2G dropped), 3B chain, 4D grows; 5 answered as a note: "best score of all courses".</p>
+</details>
+
+<section id="manual">
+  <h3>Manual copy</h3>
+  <textarea id="answer" readonly placeholder="Click options above. Your answer appears here."></textarea>
+  <div id="legend"></div>
+</section>
+
+<div id="bar">
+  <div id="groups" style="display:flex;flex-wrap:wrap;gap:10px 18px"></div>
+  <div class="actions">
+    <span id="count"></span>
+    <input id="line" readonly aria-label="Answer line">
+    <button id="copy">Copy my picks</button>
+    <button id="clear">Clear</button>
+    <span id="toast"></span>
+  </div>
+</div>
+
+<script src="../../../plugins/putt-request/panel/engine.js"></script>
+<script src="../../../plugins/putt-request/panel/course.js"></script>
+<script src="../../../plugins/putt-request/panel/render.js"></script>
+<script>
+(function () {
+  var R = globalThis.MiniGolfRender
+  var MAIN = globalThis.MiniGolfCourse
+  function diamond(x, y, s) { return [[x, y - s], [x + s, y], [x, y + s], [x - s, y]] }
+  function bar(x1, y1, x2, y2) { return [[x1, y1], [x2, y1], [x2, y2], [x1, y2]] }
+  function hole(o) { return Object.assign({ blocks: [], bumpers: [], sands: [] }, o) }
+  var RECT = [[36, 412], [264, 412], [264, 36], [36, 36]]
+
+  var FB = [
+    hole({ par: 3, course: [[120, 412], [180, 412], [180, 260], [264, 120], [264, 36], [200, 36], [150, 170], [100, 36], [36, 36], [36, 120], [120, 260]], bumpers: [{ x: 150, y: 240, r: 13 }], cup: { x: 230, y: 70 }, tee: { x: 150, y: 385 } }),
+    hole({ par: 3, course: [[36, 412], [150, 412], [150, 300], [264, 300], [264, 36], [150, 36], [150, 150], [36, 150]], sands: [{ x: 93, y: 210, rx: 30, ry: 18 }], blocks: [diamond(207, 200, 14)], cup: { x: 207, y: 70 }, tee: { x: 93, y: 380 } }),
+    hole({ par: 3, course: [[100, 412], [200, 412], [264, 340], [264, 110], [200, 36], [100, 36], [36, 110], [36, 340]], blocks: [diamond(150, 225, 30)], bumpers: [{ x: 90, y: 140, r: 12 }, { x: 210, y: 300, r: 12 }], cup: { x: 150, y: 70 }, tee: { x: 150, y: 385 } }),
+    hole({ par: 2, course: [[36, 412], [264, 412], [170, 230], [170, 36], [130, 36], [130, 230]], sands: [{ x: 150, y: 330, rx: 40, ry: 18 }], cup: { x: 150, y: 66 }, tee: { x: 150, y: 390 } }),
+    hole({ par: 3, course: [[36, 412], [264, 412], [264, 36], [176, 36], [176, 330], [124, 330], [124, 36], [36, 36]], bumpers: [{ x: 150, y: 375, r: 13 }], cup: { x: 80, y: 70 }, tee: { x: 220, y: 70 } }),
+    hole({ par: 3, course: RECT, blocks: [bar(36, 250, 120, 266), bar(180, 250, 264, 266), bar(110, 140, 190, 156)], bumpers: [{ x: 150, y: 205, r: 12 }], cup: { x: 150, y: 80 }, tee: { x: 150, y: 385 } }),
+    hole({ par: 3, course: [[36, 412], [110, 412], [264, 110], [264, 36], [190, 36], [36, 338]], sands: [{ x: 150, y: 225, rx: 24, ry: 18 }], cup: { x: 226, y: 72 }, tee: { x: 72, y: 378 } }),
+    hole({ par: 4, course: [[110, 412], [190, 412], [190, 280], [264, 280], [264, 180], [190, 180], [190, 36], [110, 36], [110, 180], [36, 180], [36, 280], [110, 280]], blocks: [diamond(150, 230, 18)], bumpers: [{ x: 72, y: 230, r: 12 }], cup: { x: 230, y: 230 }, tee: { x: 150, y: 385 } }),
+    hole({ par: 4, course: RECT, blocks: [bar(90, 310, 264, 326), bar(36, 200, 210, 216), bar(90, 100, 264, 116)], cup: { x: 230, y: 66 }, tee: { x: 62, y: 380 } })
+  ]
+  var HF = [
+    hole({ par: 3, course: [[120, 412], [180, 412], [180, 150], [264, 150], [264, 36], [36, 36], [36, 150], [120, 150]], bumpers: [{ x: 150, y: 95, r: 13 }], cup: { x: 230, y: 80 }, tee: { x: 150, y: 385 } }),
+    hole({ par: 3, course: RECT, bumpers: [{ x: 110, y: 260, r: 12 }, { x: 190, y: 180, r: 12 }, { x: 110, y: 110, r: 12 }], cup: { x: 205, y: 70 }, tee: { x: 95, y: 385 } }),
+    hole({ par: 3, course: RECT, blocks: [bar(144, 130, 156, 412)], sands: [{ x: 210, y: 290, rx: 28, ry: 20 }], cup: { x: 210, y: 360 }, tee: { x: 90, y: 385 } }),
+    hole({ par: 2, course: [[60, 412], [240, 412], [264, 220], [240, 36], [60, 36], [36, 220]], blocks: [diamond(105, 220, 16), diamond(195, 220, 16)], cup: { x: 150, y: 70 }, tee: { x: 150, y: 385 } }),
+    hole({ par: 3, course: [[36, 412], [264, 412], [264, 36], [180, 36], [180, 320], [36, 320]], sands: [{ x: 222, y: 230, rx: 22, ry: 26 }], cup: { x: 222, y: 72 }, tee: { x: 72, y: 366 } }),
+    hole({ par: 3, course: [[90, 412], [210, 412], [264, 330], [264, 120], [210, 36], [90, 36], [36, 120], [36, 330]], blocks: [diamond(150, 165, 16), diamond(98, 240, 14), diamond(202, 240, 14), diamond(150, 315, 14)], cup: { x: 150, y: 240 }, tee: { x: 150, y: 385 } }),
+    hole({ par: 3, course: [[36, 412], [130, 412], [264, 250], [264, 150], [170, 36], [36, 36], [36, 120], [150, 200]], sands: [{ x: 228, y: 200, rx: 18, ry: 24 }], cup: { x: 72, y: 72 }, tee: { x: 80, y: 390 } }),
+    hole({ par: 4, course: RECT, blocks: [bar(36, 212, 130, 228), bar(170, 212, 264, 228)], bumpers: [{ x: 150, y: 300, r: 14 }, { x: 150, y: 140, r: 12 }], cup: { x: 70, y: 70 }, tee: { x: 230, y: 385 } }),
+    hole({ par: 4, course: [[150, 412], [264, 300], [264, 140], [150, 28], [36, 140], [36, 300]], blocks: [bar(80, 215, 220, 231)], bumpers: [{ x: 110, y: 130, r: 12 }, { x: 190, y: 310, r: 12 }], cup: { x: 150, y: 80 }, tee: { x: 150, y: 385 } })
+  ]
+  function par(h) { return h.reduce(function (t, x) { return t + x.par }, 0) }
+
+  var THEMES = {
+    main: { name: MAIN.name, names: MAIN.holes.map(function (h) { return h.name }), holes: MAIN.holes, par: MAIN.par, turf: {} },
+    fb: { name: 'Feature Branch', names: ['Fork', 'Rebase', 'Cherry Pick', 'Squash', 'Stash', 'Detached Head', 'Force Push', 'Code Review', 'Release'], holes: FB, par: par(FB), turf: {} },
+    hf: { name: 'Hotfix', names: ['Pager', 'Repro', 'Bisect', 'Patch', 'Hot Path', 'Revert', 'Canary', 'Postmortem', 'All Clear'], holes: HF, par: par(HF), turf: { turfA: '#b5603f', turfB: '#c26c4a', turfEdge: '#874330', sandA: '#f0dca6', sandB: '#dcc387', flag: '#fff1c2' } }
+  }
+  var BASE = R.readPalette()
+  function pal(k) { return Object.assign({}, BASE, THEMES[k].turf) }
+
+  var ICONS = {
+    flag: '<path d="M4 22V4a1 1 0 0 1 .4-.8A6 6 0 0 1 8 2c3 0 5 2 7.333 2q2 0 3.067-.8A1 1 0 0 1 20 4v10a1 1 0 0 1-.4.8A6 6 0 0 1 16 16c-3 0-5-2-8-2a6 6 0 0 0-4 1.528"/>',
+    left: '<path d="m15 18-6-6 6-6"/>',
+    lock: '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+    unlock: '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>',
+    trophy: '<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>'
+  }
+  function icon(n) { return '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICONS[n] + '</svg>' }
+
+  var thumbs = []
+  function thumbTag(theme, index) { thumbs.push([theme, index]); return '<canvas data-thumb="' + (thumbs.length - 1) + '"></canvas>' }
+  function paintThumbs(root) {
+    root.querySelectorAll('canvas[data-thumb]').forEach(function (c) {
+      var t = thumbs[Number(c.dataset.thumb)]
+      R.paintThumbnail(c, THEMES[t[0]].holes[t[1]], pal(t[0]))
+    })
+  }
+
+  function courseScreen(el, k) {
+    var th = THEMES[k]
+    var cells = th.holes.map(function (_, i) { return '<button class="cell" title="' + th.names[i] + '">' + thumbTag(k, i) + '<small>' + (i + 1) + '</small></button>' }).join('')
+    el.innerHTML = '<div class="top"><button class="iconbutton">' + icon('left') + '</button><span class="where">' + th.name + '</span></div><div class="body"><small>9 holes · Par ' + th.par + '</small><div class="holes">' + cells + '</div><button class="primary">Start course</button></div>'
+    paintThumbs(el)
+    document.querySelector('[data-names="' + k + '"]').innerHTML = th.names.map(function (n) { return '<li>' + n + '</li>' }).join('')
+  }
+
+  function playScreen(el) {
+    var k = el.dataset.theme, src = k === 'endless' ? 'hf' : k, i = Number(el.dataset.hole)
+    var h = THEMES[src].holes[i]
+    var where = k === 'endless' ? THEMES.hf.names[i] : (i + 1) + '. ' + THEMES[src].names[i]
+    var foot = k === 'endless' ? 'Streak <b>4</b> · Best <b>6</b>' : 'To par <b>+1</b>'
+    el.innerHTML = '<div class="top"><button class="iconbutton">' + icon('left') + '</button><span class="where">' + where + '</span><span class="strokes push">Par ' + h.par + ' · 0</span></div><div class="stage"><canvas class="field" width="600" height="880"></canvas></div><div class="foot"><span>' + foot + '</span></div>'
+    var c = el.querySelector('canvas'), bg = document.createElement('canvas'); bg.width = 600; bg.height = 880
+    R.paintHole(bg.getContext('2d'), h, pal(src), 2)
+    R.drawFrame(c.getContext('2d'), bg, { ball: { x: h.tee.x, y: h.tee.y }, shot: null, sinkTime: null, hole: h, message: '' }, pal(src))
+  }
+  function card(theme, index, title, sub, locked) {
+    return '<button class="card' + (locked ? ' locked' : '') + '">' + thumbTag(theme, index) + (locked ? '<span class="badge">' + icon('lock') + '</span>' : '') + '<b>' + title + '</b><small>' + sub + '</small></button>'
+  }
+  function library(el, cards) {
+    el.innerHTML = '<div class="top">' + icon('flag') + '<span class="where">Putt Request</span><button class="iconbutton push">' + icon('trophy') + '</button></div><div class="body"><div class="grid">' + cards + '</div></div>'
+    paintThumbs(el)
+  }
+  function stat(label, value, detail) { return '<div class="stat"><small>' + label + '</small><strong>' + value + '</strong><small>' + detail + '</small></div>' }
+  function rows(list) { return '<small class="other">Other rounds</small><ol class="board">' + list.map(function (r, i) { return '<li><span class="rank">' + (i + 2) + '</span><b>' + r[0] + '</b><span class="rank">' + r[1] + '</span><span class="rank">' + r[2] + '</span></li>' }).join('') + '</ol>' }
+  function boardShell(el, inner) {
+    el.innerHTML = '<div class="top"><button class="iconbutton">' + icon('left') + '</button><span class="where">Your leaderboard</span></div><div class="body">' + inner + '</div>'
+  }
+  var s = function (sel) { return document.querySelector('[data-screen="' + sel + '"]') }
+  var M = MAIN.name, F = THEMES.fb.name, H = THEMES.hf.name
+  library(s('lib-new'), card('main', 0, M, '9 holes · Unplayed') + card('fb', 0, F, 'Finish ' + M, true) + card('hf', 0, H, 'Finish ' + F, true))
+  library(s('lib-mid'), card('main', 1, 'Endless', '9 of 27 holes · Best 2') + card('main', 0, M, '9 holes · Best 25') + card('fb', 0, F, '9 holes · Unplayed') + card('hf', 0, H, 'Finish ' + F, true))
+  library(s('lib-done'), card('main', 1, 'Endless', '27 holes · Best 6') + card('main', 0, M, '9 holes · Best 25') + card('fb', 0, F, '9 holes · Best 30') + card('hf', 0, H, '9 holes · Best 31'))
+  s('finish').innerHTML = '<div class="top"><button class="iconbutton">' + icon('left') + '</button><span class="where">' + M + '</span></div><div class="body finished"><strong>25</strong><small>−2 · New best</small><span class="unlock">' + icon('unlock') + F + ' unlocked</span><button class="primary">Play ' + F + '</button><button class="secondary">Play again</button><button class="secondary">Leaderboard</button></div>'
+  boardShell(s('board-now'), '<div class="stats">' + stat(M + ' best', 25, '−2 · Nov 3') + stat('Endless best', 6, 'in a row · Nov 1') + '</div>' + rows([[27, 'Even', 'Nov 2'], [29, '+2', 'Oct 30'], [31, '+4', 'Oct 29']]))
+  boardShell(s('board-each'), '<div class="stats">' + stat(M + ' best', 25, '−2 · Nov 3') + stat(F + ' best', 30, '+2 · Nov 5') + stat(H + ' best', '–', 'Finish ' + F + ' first') + stat('Endless best', 6, 'in a row · 18 holes') + '</div>')
+  boardShell(s('board-sum'), '<div class="stats one">' + stat('Best of all courses', 86, '+4 · 25 + 30 + 31') + '</div><div class="stats">' + stat('Endless best', 6, 'in a row · 27 holes') + '</div>')
+  document.querySelectorAll('[data-screen="course"]').forEach(function (el) { courseScreen(el, el.dataset.theme) })
+  document.querySelectorAll('[data-screen="play"]').forEach(playScreen)
+})()
+</script>
+<script>
+(function () {
+  var KEY = document.body.dataset.key || location.pathname;
+  var state = { picks: {}, notes: {} };
+  try {
+    var saved = JSON.parse(localStorage.getItem(KEY) || "{}");
+    state.picks = saved.picks || {};
+    state.notes = saved.notes || {};
+  } catch (e) {}
+
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+  function issueOf(code) { var m = /^(\d+)/.exec(code); return m ? m[1] : code; }
+
+  var issues = [];
+  var options = {};
+  var labels = {};
+  var cards = {};
+
+  document.querySelectorAll(".issue").forEach(function (sec) {
+    var id = sec.dataset.issue;
+    var title = sec.querySelector("h2");
+    labels[id] = title ? title.textContent.replace(/^\s*\d+\s*/, "").trim() : id;
+    issues.push(id);
+    options[id] = [];
+
+    sec.querySelectorAll(".col").forEach(function (col) {
+      var chip = col.querySelector(".cap .pick");
+      if (!chip) return;
+      var code = chip.textContent.trim();
+      if (!/^\d+[A-Za-z]/.test(code)) return;
+      var name = (chip.nextSibling && chip.nextSibling.textContent || "").trim();
+      col.dataset.opt = code;
+      var tick = document.createElement("span");
+      tick.className = "tick";
+      tick.textContent = "✓";
+      col.appendChild(tick);
+      col.addEventListener("click", function (ev) {
+        if (ev.target.closest("textarea, input, a, select")) return;
+        choose(code);
+      });
+      cards[code] = col;
+      options[id].push({ code: code, name: name });
+    });
+
+    if (sec.dataset.keep !== "drawn") options[id].push({ code: id + "-keep", name: "keep as-is" });
+
+    var ta = document.createElement("textarea");
+    ta.className = "notes";
+    ta.dataset.issue = id;
+    ta.placeholder = "Notes on " + id + ": what's off, or what would make it the one";
+    ta.value = state.notes[id] || "";
+    ta.addEventListener("input", function () {
+      if (ta.value.trim()) state.notes[id] = ta.value; else delete state.notes[id];
+      save();
+      render();
+    });
+    sec.appendChild(ta);
+  });
+
+  var groups = document.getElementById("groups");
+  issues.forEach(function (id) {
+    var g = document.createElement("div");
+    g.className = "grp";
+    var b = document.createElement("b");
+    b.textContent = id;
+    g.appendChild(b);
+    options[id].forEach(function (o) {
+      var btn = document.createElement("button");
+      btn.dataset.code = o.code;
+      btn.title = o.name;
+      btn.textContent = /-keep$/.test(o.code) ? "keep" : o.code.slice(id.length);
+      btn.addEventListener("click", function () {
+        choose(o.code);
+        if (cards[o.code]) cards[o.code].scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+      });
+      g.appendChild(btn);
+    });
+    groups.appendChild(g);
+  });
+
+  document.getElementById("legend").textContent = issues.map(function (id) {
+    return id + "  " + labels[id] + "\n" + options[id].map(function (o) {
+      return "    " + o.code + "  " + o.name;
+    }).join("\n");
+  }).join("\n");
+
+  function choose(code) {
+    var id = issueOf(code);
+    if (state.picks[id] === code) delete state.picks[id]; else state.picks[id] = code;
+    save();
+    render();
+  }
+
+  function answerLine() {
+    return issues.filter(function (id) { return state.picks[id]; })
+      .map(function (id) { return state.picks[id]; }).join("  ");
+  }
+
+  function fullAnswer() {
+    var out = answerLine();
+    var notes = issues.filter(function (id) { return state.notes[id] && state.notes[id].trim(); })
+      .map(function (id) { return id + " (" + labels[id] + "): " + state.notes[id].trim().replace(/\s*\n\s*/g, " / "); });
+    if (notes.length) out += "\n\n" + notes.join("\n");
+    return out;
+  }
+
+  function render() {
+    Object.keys(cards).forEach(function (code) {
+      cards[code].classList.toggle("picked", state.picks[issueOf(code)] === code);
+    });
+    document.querySelectorAll("#groups button").forEach(function (btn) {
+      btn.classList.toggle("on", state.picks[issueOf(btn.dataset.code)] === btn.dataset.code);
+    });
+    var n = issues.filter(function (id) { return state.picks[id]; }).length;
+    document.getElementById("count").textContent = n + " / " + issues.length;
+    document.getElementById("line").value = answerLine();
+    document.getElementById("answer").value = fullAnswer();
+  }
+
+  function flash(msg) {
+    var t = document.getElementById("toast");
+    t.textContent = msg;
+    setTimeout(function () { t.textContent = ""; }, 2500);
+  }
+
+  function fallbackCopy() {
+    var ta = document.getElementById("answer");
+    ta.focus();
+    ta.select();
+    var ok = false;
+    try { ok = document.execCommand("copy"); } catch (e) {}
+    if (ok) flash("copied");
+    else { ta.scrollIntoView({ block: "center" }); flash("press ⌘C"); }
+  }
+
+  document.getElementById("copy").addEventListener("click", function () {
+    var text = fullAnswer();
+    if (!text) { flash("nothing picked"); return; }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { flash("copied"); }, fallbackCopy);
+    } else fallbackCopy();
+  });
+
+  document.getElementById("clear").addEventListener("click", function () {
+    state = { picks: {}, notes: {} };
+    document.querySelectorAll("textarea.notes").forEach(function (ta) { ta.value = ""; });
+    save();
+    render();
+  });
+
+  ["line", "answer"].forEach(function (id) {
+    document.getElementById(id).addEventListener("focus", function (ev) { ev.target.select(); });
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
