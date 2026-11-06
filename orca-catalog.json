@@ -185,6 +185,58 @@
           }
         }
       ]
+    },
+    {
+      "id": "aamonnaig4.now-playing",
+      "source": {
+        "kind": "git",
+        "url": "https://github.com/aamonnaig4/orca-plugins.git",
+        "ref": "main",
+        "path": "plugins/now-playing"
+      },
+      "description": "Control Spotify from the sidebar: now playing, controls, search, playlists, queue and devices.",
+      "categories": [
+        "utilities"
+      ],
+      "releases": [
+        {
+          "version": "1.0.0",
+          "commit": "7f724359f7bc192463184e102ebf477dd9569ccd",
+          "contentHash": "a1d84059ee41163d58a592004b54495fbce206ec3bc53290159bdf5090e3a693",
+          "execution": "trusted-worker",
+          "minimumOrca": "1.4.248",
+          "name": "Now Playing",
+          "contributes": [
+            {
+              "kind": "panels",
+              "name": "Now Playing"
+            }
+          ],
+          "capabilities": [
+            "storage:own",
+            "settings:own",
+            "secrets:own"
+          ],
+          "images": {
+            "cover": {
+              "path": "plugins/now-playing/media/cover.png",
+              "alt": "Now Playing in Orca's sidebar: a song with its cover art, the device menu open with volume, and search results",
+              "sha256": "325885cdb2807056f875a4d3d17c371641c7a55841b469c6b7d0e251bc25a973",
+              "width": 1600,
+              "height": 1000
+            },
+            "screenshots": [
+              {
+                "path": "plugins/now-playing/media/screens.png",
+                "alt": "Three panels: the Playlists tab, Search results for lantern, and the Queue",
+                "sha256": "b4bf0148d83fc287ad74f4024c08695384fae7a33c68c3a8343d42543e03bb0f",
+                "width": 1600,
+                "height": 1000
+              }
+            ]
+          }
+        }
+      ]
     }
   ]
 }
