@@ -1,0 +1,39 @@
+{
+  "manifestVersion": 2,
+  "id": "putt-request",
+  "name": "Putt Request",
+  "version": "1.0.0",
+  "execution": "sandboxed-ui",
+  "description": "Pixel-art mini golf in Orca's sidebar for the wait between agents. Offline and solo, with a private leaderboard.",
+  "license": "MIT",
+  "repository": "https://github.com/aamonnaig4/orca-plugins",
+  "engines": {
+    "orca": ">=1.4.246"
+  },
+  "pluginApi": 1,
+  "contributes": {
+    "panels": [
+      {
+        "id": "putt-request",
+        "title": "Putt Request",
+        "icon": "flag",
+        "entry": "panel/index.html"
+      }
+    ]
+  },
+  "capabilities": [
+    {
+      "kind": "storage:own"
+    }
+  ],
+  "cover": {
+    "path": "media/cover.png",
+    "alt": "The title Putt Request above three pixel-art mini golf holes on a dark starfield"
+  },
+  "screenshots": [
+    {
+      "path": "media/screens.png",
+      "alt": "Three screens: the game library, a putt being lined up on the hole Off By One, and the private leaderboard"
+    }
+  ]
+}
