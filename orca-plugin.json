@@ -1,0 +1,39 @@
+{
+  "manifestVersion": 2,
+  "id": "oled-pair",
+  "name": "OLED Pair",
+  "version": "1.0.0",
+  "execution": "data",
+  "description": "True black and true white themes with matching terminal colors. The dark theme is an unchanged copy of the MIT-licensed Orca OLED theme.",
+  "license": "MIT",
+  "engines": {
+    "orca": ">=1.4.246"
+  },
+  "contributes": {
+    "themes": [
+      {
+        "id": "oled-dark",
+        "title": "OLED Dark",
+        "path": "themes/oled-dark.json"
+      },
+      {
+        "id": "oled-light",
+        "title": "OLED Light",
+        "path": "themes/oled-light.json"
+      }
+    ],
+    "terminalThemes": [
+      {
+        "id": "oled-dark",
+        "title": "OLED Dark",
+        "path": "terminal/oled-dark.json"
+      },
+      {
+        "id": "oled-light",
+        "title": "OLED Light",
+        "path": "terminal/oled-light.json"
+      }
+    ]
+  },
+  "capabilities": []
+}
