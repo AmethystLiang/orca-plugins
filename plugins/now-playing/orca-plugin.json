@@ -1,0 +1,48 @@
+{
+  "manifestVersion": 2,
+  "id": "now-playing",
+  "name": "Now Playing",
+  "version": "1.0.0",
+  "execution": "trusted-worker",
+  "description": "Control Spotify from Orca: now playing, controls, search, playlists, queue and devices, in the sidebar. Needs Spotify Premium and a free Spotify developer app of your own.",
+  "license": "MIT",
+  "repository": "https://github.com/aamonnaig4/orca-plugins",
+  "engines": {
+    "orca": ">=1.4.248"
+  },
+  "pluginApi": 1,
+  "main": "src/worker.ts",
+  "contributes": {
+    "panels": [
+      {
+        "id": "player",
+        "title": "Now Playing",
+        "icon": "play",
+        "entry": "src/panel.ts",
+        "ui": "html"
+      }
+    ],
+    "settings": [
+      {
+        "key": "clientId",
+        "title": "Spotify Client ID",
+        "description": "The Client ID of your own app at developer.spotify.com. The app needs the redirect URI http://127.0.0.1:8888/callback. The panel walks you through it.",
+        "type": "string",
+        "default": "",
+        "maxLength": 64,
+        "placeholder": "32 characters from the Spotify dashboard"
+      }
+    ]
+  },
+  "capabilities": [
+    {
+      "kind": "storage:own"
+    },
+    {
+      "kind": "settings:own"
+    },
+    {
+      "kind": "secrets:own"
+    }
+  ]
+}
