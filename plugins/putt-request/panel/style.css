@@ -19,7 +19,7 @@ canvas.field { display: block; touch-action: none; cursor: crosshair; image-rend
 .foot b { color: var(--orca-foreground, #e6e6e6); font-weight: 600; font-variant-numeric: tabular-nums; }
 .score { flex: none; }
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-.card { display: flex; flex-direction: column; gap: 2px; padding: 5px; border-radius: 7px; min-width: 0; }
+.card { position: relative; display: flex; flex-direction: column; gap: 2px; padding: 5px; border-radius: 7px; min-width: 0; }
 .card:hover, .cell:not(.locked):hover { background: var(--orca-accent, #1a1a1a); }
 .card canvas { display: block; width: 100%; aspect-ratio: 1 / 1; object-fit: contain; border-radius: 4px; margin-bottom: 3px; }
 .card b { font-weight: 600; }
@@ -42,3 +42,12 @@ canvas.field { display: block; touch-action: none; cursor: crosshair; image-rend
 .board li { display: grid; grid-template-columns: 20px 40px 1fr auto; align-items: center; gap: 6px; height: 28px; }
 .board b { font-weight: 600; font-variant-numeric: tabular-nums; }
 .rank { color: var(--orca-muted-foreground, #a3a3a3); font-variant-numeric: tabular-nums; }
+.card.locked { cursor: default; }
+.card.locked:hover { background: none; }
+.card.locked canvas { filter: grayscale(1) brightness(0.35); }
+.card.locked b { color: var(--orca-muted-foreground, #a3a3a3); }
+.badge { position: absolute; left: 5px; right: 5px; top: 5px; aspect-ratio: 1 / 1; display: grid; place-items: center; }
+.badge .icon { width: 18px; height: 18px; }
+.unlock { display: flex; align-items: center; gap: 6px; margin: 6px 0 10px; font-weight: 600; }
+.stats.one { grid-template-columns: 1fr; }
+.stats.one strong { font-size: 44px; }
