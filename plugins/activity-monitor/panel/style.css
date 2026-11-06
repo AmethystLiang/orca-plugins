@@ -272,3 +272,6 @@ body {
 .brbar .brempty { color: color-mix(in srgb, var(--fg) 14%, transparent); }
 .pixel .pips i { background: radial-gradient(circle, color-mix(in srgb, var(--fg) 14%, transparent) 0.9px, transparent 1.1px) 0 0 / 3px 3px; border-radius: 0; }
 .pixel .pips i.on { background-image: radial-gradient(circle, var(--c) 0.9px, transparent 1.1px); }
+.pop-list { max-height: calc(5.5 * (26px + 2px) * var(--ts, 1)); overflow: hidden auto; overscroll-behavior: contain; scrollbar-width: none; mask-image: linear-gradient(to bottom, #000 calc(100% - 18px), transparent); }
+.pop-list::-webkit-scrollbar { display: none; }
+.pop-list.end { mask-image: none; }

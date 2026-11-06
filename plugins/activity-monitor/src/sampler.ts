@@ -76,6 +76,7 @@ export type SamplerOptions = {
 }
 
 const HISTORY = 900
+const SUSPECTS = 30
 const PROC_FLOOR = 900
 
 function cpuSplit(before: CpuTimes[], after: CpuTimes[]): Sample['split'] {
@@ -266,7 +267,7 @@ export function createSampler(options: SamplerOptions = {}) {
     const snap = health.snapshot()
     const by: 'mem' | 'cpu' = snap.step === 2 ? 'cpu' : 'mem'
     const list = await procs.ready().catch(() => null)
-    return { by, word: snap.word, cause: snap.cause, items: topSuspects(list, { selfPids, protectedNames: provider.protectedNames }, by) }
+    return { by, word: snap.word, cause: snap.cause, items: topSuspects(list, { selfPids, protectedNames: provider.protectedNames }, by, SUSPECTS) }
   }
 
   function onAlert(sink: (alert: Alert) => void): void {

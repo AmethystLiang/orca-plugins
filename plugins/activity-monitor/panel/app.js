@@ -650,16 +650,24 @@
     return '<div class="pop-r"><span class="pop-n" title="' + esc(it.name + ' · pid ' + it.pid) + '">' + name + '</span><span class="pop-v num">' + value + '</span>' + act + '</div>'
   }
 
+  function popFade(list) {
+    list.classList.toggle('end', list.scrollTop + list.clientHeight >= list.scrollHeight - 2)
+  }
+
   function popPaint() {
     if (!pop.el) return
     var d = pop.data
     var body
     if (!d) body = '<div class="pop-e mut">Looking…</div>'
     else if (!d.items.length) body = '<div class="pop-e mut">No processes to show</div>'
-    else body = d.items.map(function (it) { return popRow(it, d.by) }).join('')
+    else body = '<div class="pop-list">' + d.items.map(function (it) { return popRow(it, d.by) }).join('') + '</div>'
+    var oldList = pop.el.querySelector('.pop-list')
+    var listTop = oldList ? oldList.scrollTop : 0
     var focusPid = document.activeElement && pop.el.contains(document.activeElement) ? document.activeElement.dataset.pq : null
     pop.el.innerHTML = popHeader() + '<div class="pop-s mut">Likely culprits · by ' + (d && d.by === 'cpu' ? 'CPU' : 'memory') + '</div>' + body
-    if (focusPid) { var f = pop.el.querySelector('[data-pq="' + focusPid + '"]'); if (f) f.focus() }
+    var newList = pop.el.querySelector('.pop-list')
+    if (newList) { newList.scrollTop = listTop; popFade(newList) }
+    if (focusPid) { var f = pop.el.querySelector('[data-pq="' + focusPid + '"]'); if (f) f.focus({ preventScroll: true }) }
     popPlace()
   }
 
@@ -696,6 +704,7 @@
     pop.el.setAttribute('role', 'dialog')
     pop.el.setAttribute('aria-label', 'Likely culprits')
     pop.el.addEventListener('click', popClick)
+    pop.el.addEventListener('scroll', function (ev) { if (ev.target.classList && ev.target.classList.contains('pop-list')) popFade(ev.target) }, true)
     pop.el.addEventListener('keydown', function (ev) {
       if (ev.key === 'Escape') { popClose(); var hs = root.querySelector('.hs'); if (hs) hs.focus() }
       if ((ev.key === 'Enter' || ev.key === ' ') && ev.target.dataset.pq) { ev.preventDefault(); popClick(ev) }
@@ -1307,10 +1316,22 @@
     if (ev.key === 'Escape') popClose()
     if (ev.key === 'ArrowUp' && pop.el) { var f = pop.el.querySelector('[data-pq]'); if (f) { ev.preventDefault(); f.focus() } }
   })
+  var swallowUntil = 0
   document.addEventListener('pointerdown', function (ev) {
     if (!pop.el) return
     if (pop.el.contains(ev.target) || ev.target.closest('.hs[data-cause]')) return
+    ev.stopPropagation()
+    ev.preventDefault()
+    swallowUntil = Date.now() + 1000
     popClose()
+  }, true)
+  ;['click', 'dblclick', 'contextmenu', 'mousedown', 'mouseup'].forEach(function (type) {
+    document.addEventListener(type, function (ev) {
+      if (Date.now() > swallowUntil) return
+      ev.stopPropagation()
+      ev.preventDefault()
+      if (type === 'click' || type === 'contextmenu') swallowUntil = 0
+    }, true)
   })
   document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape' && pop.el) popClose() })
   window.addEventListener('resize', popPlace)
