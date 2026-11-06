@@ -44,5 +44,15 @@
     {
       "kind": "secrets:own"
     }
+  ],
+  "cover": {
+    "path": "media/cover.png",
+    "alt": "Now Playing in Orca's sidebar: a song with its cover art, the device menu open with volume, and search results"
+  },
+  "screenshots": [
+    {
+      "path": "media/screens.png",
+      "alt": "Three panels: the Playlists tab, Search results for lantern, and the Queue"
+    }
   ]
 }

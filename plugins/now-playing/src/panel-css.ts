@@ -52,7 +52,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--orca-ring, 
 .item.now .t > span:first-child { color: var(--sp-ok); }
 .sec { font-size: 10.5px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; color: var(--orca-muted-foreground, #8a8a8a); margin: 8px 2px 2px; }
 .note { padding: 8px 4px; }
-.pop { position: absolute; top: 112px; left: 84px; right: 12px; max-width: 240px; background: var(--sp-pop); border-radius: 8px; box-shadow: var(--sp-pop-shadow); padding: 4px; z-index: 5; }
+.pop { position: absolute; top: 112px; left: 84px; width: 230px; max-width: calc(100vw - 24px); background: var(--sp-pop); border-radius: 8px; box-shadow: var(--sp-pop-shadow); padding: 4px; z-index: 5; }
 .pop .item { padding: 6px 8px; }
 .pop .item.on { color: var(--sp-ok); }
 .vol { display: flex; align-items: center; gap: 6px; padding: 8px 8px 4px; border-top: 1px solid var(--sp-chip); margin-top: 2px; }

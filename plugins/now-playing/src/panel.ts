@@ -442,6 +442,12 @@ function renderPop(): void {
     popBox.appendChild(vol)
   }
   if (!popBox.isConnected) app.appendChild(popBox)
+  const chip = playerBox.querySelector('.dev')
+  if (chip) {
+    const at = chip.getBoundingClientRect()
+    popBox.style.top = `${Math.round(at.bottom + 4)}px`
+    popBox.style.left = `${Math.round(at.left)}px`
+  }
 }
 
 function renderTabs(): void {

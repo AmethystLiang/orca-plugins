@@ -2,6 +2,8 @@
 
 Control Spotify from Orca's right sidebar: see what's playing, skip, seek, like songs, search Spotify, start any playlist and move playback between your devices.
 
+![The Playlists, Search and Queue tabs](media/screens.png)
+
 - **Player**: cover, song, artist and album, a seek bar, and shuffle, previous, play/pause, next and repeat. The heart saves the song to your Liked Songs. A soft wash from the cover's color sits behind the player.
 - **Device chip**: the green chip under the song shows where it's playing. Click it to move playback to another device (your Mac, phone or a speaker) and to set the volume.
 - **Search**: songs, artists, albums and playlists. Click a song to play it, or hover it and add it to the queue.
