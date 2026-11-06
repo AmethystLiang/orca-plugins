@@ -85,8 +85,8 @@ const imageInFlight = new Set<string>()
 const imageWaiters = new Map<string, HTMLElement[]>()
 let imageTimer: ReturnType<typeof setTimeout> | null = null
 
-function imageEl(data: string, round: boolean): HTMLImageElement {
-  const img = el('img', `art${round ? ' round' : ''}`)
+function imageEl(data: string, cls: string): HTMLImageElement {
+  const img = el('img', cls)
   img.src = data
   img.alt = ''
   return img
@@ -104,22 +104,28 @@ async function loadImages(): Promise<void> {
   const answer = await request<Record<string, string | null>>('images.get', { urls })
   for (const url of urls) {
     const data = answer?.[url]
+    imageInFlight.delete(url)
+    if (answer && data === undefined) continue
     if (typeof data === 'string' && data.startsWith('data:image/')) {
       imageCache.set(url, data)
-      for (const box of imageWaiters.get(url) ?? []) if (box.isConnected) box.replaceWith(imageEl(data, box.classList.contains('round')))
+      for (const box of imageWaiters.get(url) ?? []) if (box.isConnected) box.replaceWith(imageEl(data, box.dataset.cls ?? 'art'))
+      if (now()?.cover === url) setTint(data)
     } else imageFailed.add(url)
     imageWaiters.delete(url)
-    imageInFlight.delete(url)
   }
   scheduleImages(0)
 }
 
 function art(src: string | null, round = false): HTMLElement {
-  if (src && src.startsWith('data:image/')) return imageEl(src, round)
-  const box = el('span', `art${round ? ' round' : ''}`)
+  return lazyImage(src, `art${round ? ' round' : ''}`, el('span', `art${round ? ' round' : ''}`))
+}
+
+function lazyImage(src: string | null, cls: string, box: HTMLElement): HTMLElement {
+  if (src && src.startsWith('data:image/')) return imageEl(src, cls)
+  box.dataset.cls = cls
   if (!src || !src.startsWith('https://') || imageFailed.has(src)) return box
   const known = imageCache.get(src)
-  if (known) return imageEl(known, round)
+  if (known) return imageEl(known, cls)
   imageWaiters.set(src, [...(imageWaiters.get(src) ?? []), box])
   scheduleImages(30)
   return box
@@ -357,14 +363,9 @@ function renderPlayer(): void {
   const devices = view?.status === 'ok' ? view.devices : []
   playerBox.replaceChildren()
   const head = el('div', 'head')
-  const cover = playing?.cover ? el('img', 'cover') : el('div', 'cover')
-  if (playing?.cover && cover instanceof HTMLImageElement) {
-    cover.src = playing.cover
-    cover.alt = ''
-  } else {
-    cover.appendChild(icon('music'))
-    cover.classList.add('m')
-  }
+  const placeholder = el('div', 'cover m')
+  placeholder.appendChild(icon('music'))
+  const cover = lazyImage(playing?.cover ?? null, 'cover', placeholder)
   const meta = el('div', 'meta')
   if (playing) {
     meta.append(el('div', 'b clip', playing.name), el('div', 'm sm clip', playing.artists))
@@ -397,7 +398,7 @@ function renderPlayer(): void {
     )
   }
   playerBox.appendChild(head)
-  setTint(playing?.cover ?? null)
+  setTint(playing?.cover ? (imageCache.get(playing.cover) ?? null) : null)
 
   if (playing) {
     const seek = el('div')
