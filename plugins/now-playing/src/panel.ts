@@ -22,6 +22,7 @@ const ICONS: Record<string, string> = {
   music: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
   chev: '<polyline points="6 9 12 15 18 9"/>',
   back: '<polyline points="15 18 9 12 15 6"/>',
+  check: '<polyline points="20 6 9 17 4 12"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   open: '<path d="M7 17 17 7"/><path d="M8 7h9v9"/>',
   close: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'
@@ -217,6 +218,41 @@ function progressMs(): number {
   return Math.min(playing.durationMs, playing.progressMs + moved)
 }
 
+function vivid(data: Uint8ClampedArray): string {
+  let r = 0
+  let g = 0
+  let b = 0
+  let weight = 0
+  let all = [0, 0, 0, 0]
+  for (let i = 0; i < data.length; i += 4) {
+    const max = Math.max(data[i], data[i + 1], data[i + 2])
+    const min = Math.min(data[i], data[i + 1], data[i + 2])
+    all = [all[0] + data[i], all[1] + data[i + 1], all[2] + data[i + 2], all[3] + 1]
+    if (max < 40 || min > 225) continue
+    const sat = (max - min) / max
+    const w = sat * sat * (0.5 + max / 255)
+    r += data[i] * w
+    g += data[i + 1] * w
+    b += data[i + 2] * w
+    weight += w
+  }
+  const [R, G, B] = weight > 0.5 ? [r / weight, g / weight, b / weight] : [all[0] / all[3], all[1] / all[3], all[2] / all[3]]
+  const max = Math.max(R, G, B) / 255
+  const min = Math.min(R, G, B) / 255
+  const l = (max + min) / 2
+  const d = max - min
+  let h = 0
+  if (d > 0) {
+    if (max === R / 255) h = ((G - B) / 255 / d) % 6
+    else if (max === G / 255) h = (B - R) / 255 / d + 2
+    else h = (R - G) / 255 / d + 4
+  }
+  const sat = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1))
+  const hue = Math.round((h * 60 + 360) % 360)
+  const boosted = weight > 0.5 ? Math.max(0.55, Math.min(0.9, sat)) : sat
+  return `${hue}, ${Math.round(boosted * 100)}%, ${Math.round(Math.min(0.6, Math.max(0.4, l)) * 100)}%`
+}
+
 function setTint(src: string | null): void {
   if (src === lastCover) return
   lastCover = src
@@ -228,27 +264,13 @@ function setTint(src: string | null): void {
   img.onload = () => {
     try {
       const canvas = document.createElement('canvas')
-      canvas.width = 8
-      canvas.height = 8
+      canvas.width = 16
+      canvas.height = 16
       const ctx = canvas.getContext('2d')
       if (!ctx) return
-      ctx.drawImage(img, 0, 0, 8, 8)
-      const data = ctx.getImageData(0, 0, 8, 8).data
-      let r = 0
-      let g = 0
-      let b = 0
-      let weight = 0
-      for (let i = 0; i < data.length; i += 4) {
-        const max = Math.max(data[i], data[i + 1], data[i + 2])
-        const min = Math.min(data[i], data[i + 1], data[i + 2])
-        const w = 1 + (max - min) / 32
-        r += data[i] * w
-        g += data[i + 1] * w
-        b += data[i + 2] * w
-        weight += w
-      }
-      const alpha = getComputedStyle(document.documentElement).getPropertyValue('--sp-tint-alpha').trim() || '0.3'
-      const tint = `rgba(${Math.round(r / weight)}, ${Math.round(g / weight)}, ${Math.round(b / weight)}, ${alpha})`
+      ctx.drawImage(img, 0, 0, 16, 16)
+      const alpha = getComputedStyle(document.documentElement).getPropertyValue('--sp-tint-alpha').trim() || '0.4'
+      const tint = `hsla(${vivid(ctx.getImageData(0, 0, 16, 16).data)}, ${alpha})`
       playerBox.style.setProperty('--tint', tint)
     } catch {
       playerBox.style.removeProperty('--tint')
@@ -452,6 +474,7 @@ function resetLists(): void {
 }
 
 async function chooseApp(next: App): Promise<void> {
+  choosing = false
   const answer = await request<{ ok: boolean }>('app.set', { app: next })
   if (!answer?.ok) return toast('Could not switch apps.')
   resetLists()
@@ -461,25 +484,41 @@ async function chooseApp(next: App): Promise<void> {
   await refresh()
 }
 
-function renderChoose(mac: boolean): void {
-  if (app.dataset.choose === String(mac) && app.firstChild) return
+const SPOTIFY_LOGO = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="#1DB954" d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>'
+const MUSIC_LOGO = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="am" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fb5c74"/><stop offset="1" stop-color="#fa233b"/></linearGradient></defs><rect width="24" height="24" rx="5.5" fill="url(#am)"/><path fill="#fff" d="M16.6 5.1 9.9 6.5c-.4.1-.6.4-.6.8v7.6a2.3 2.3 0 0 0-1-.2c-1.3 0-2.3.8-2.3 1.9s1 1.8 2.1 1.8c1.3 0 2.4-.9 2.4-2.3V10l5.4-1.1v4.8a2.3 2.3 0 0 0-1-.2c-1.3 0-2.3.8-2.3 1.9s1 1.8 2.1 1.8c1.3 0 2.4-.9 2.4-2.3V5.8c0-.5-.4-.8-.8-.7z"/></svg>'
+
+let choosing = false
+
+function renderChoose(mac: boolean, cancellable = false): void {
+  if (!cancellable && app.dataset.choose === String(mac) && app.firstChild) return
+  choosing = cancellable
   shellKey = null
   delete app.dataset.signedOut
   app.dataset.choose = String(mac)
-  const box = el('div', 'center choose')
-  box.append(el('div', 'b big', 'Now Playing'), el('div', 'm sm', 'Which app do you listen with?'))
-  const tiles = el('div', 'tiles')
-  const tile = (which: App, sub: string): HTMLButtonElement => {
-    const button = el('button', `tile ${which}`)
-    const logo = el('span', 'logo')
-    logo.appendChild(icon('music'))
-    button.append(logo, el('span', 'b', APP_LABEL[which]), el('span', 'm sm', sub))
+  const box = el('div', 'choose')
+  box.append(el('div', 'b big', 'Now Playing'), el('div', 'm sm', 'Pick the app you listen with.'))
+  const option = (which: App, logo: string, sub: string): HTMLButtonElement => {
+    const button = el('button', 'pick')
+    const mark = el('span', 'logo')
+    mark.innerHTML = logo
+    const text = el('span', 'pick-text')
+    text.append(el('span', 'b', APP_LABEL[which]), el('span', 'm sm', sub))
+    button.append(mark, text)
     button.addEventListener('click', () => void chooseApp(which))
     return button
   }
-  tiles.appendChild(tile('spotify', 'DJ, queue, your library'))
-  if (mac) tiles.appendChild(tile('music', 'Player and your library'))
-  box.append(tiles, el('div', 'm sm', 'You can change this later at the bottom of the panel.'))
+  box.appendChild(option('spotify', SPOTIFY_LOGO, 'DJ, queue and your library'))
+  if (mac) box.append(el('div', 'or m sm', 'or'), option('music', MUSIC_LOGO, 'Player and your library'))
+  box.appendChild(el('div', 'm sm note-end', 'Change it any time at the bottom of the panel.'))
+  if (cancellable) {
+    const cancel = el('button', 'link note-end', 'Cancel')
+    cancel.addEventListener('click', () => {
+      choosing = false
+      shellKey = null
+      void refresh()
+    })
+    box.appendChild(cancel)
+  }
   app.replaceChildren(box)
 }
 
@@ -488,7 +527,11 @@ function renderFoot(): void {
   footBox.replaceChildren(row)
   const which = currentApp()
   const left = el('div', 'appname m sm')
-  left.append(el('span', `appdot ${which}`), el('span', '', APP_LABEL[which]))
+  const name = el('button', 'link appbtn')
+  name.title = 'Change app'
+  name.append(el('span', `appdot ${which}`), el('span', '', APP_LABEL[which]))
+  name.addEventListener('click', () => renderChoose(MAC, true))
+  left.appendChild(name)
   if (MAC) {
     const other: App = which === 'spotify' ? 'music' : 'spotify'
     const swap = el('button', 'link', `Switch to ${APP_LABEL[other]}`)
@@ -671,6 +714,7 @@ function renderPop(): void {
   for (const device of devices) {
     const row = el('button', `item${device.active ? ' on' : ''}`)
     row.append(icon(deviceIcon(device)), el('span', 'clip', device.name))
+    if (device.active) row.appendChild(icon('check'))
     row.addEventListener('click', (event) => {
       event.stopPropagation()
       devOpen = false
@@ -688,12 +732,19 @@ function renderPop(): void {
     slider.max = '100'
     slider.value = String(active.volume)
     slider.setAttribute('aria-label', 'Volume')
+    const level = el('span', 'level m', `${active.volume}%`)
+    const paint = (): void => {
+      level.textContent = `${slider.value}%`
+      slider.style.background = `linear-gradient(to right, var(--acc) ${slider.value}%, var(--sp-track) ${slider.value}%)`
+    }
+    paint()
+    slider.addEventListener('input', paint)
     slider.addEventListener('click', (event) => event.stopPropagation())
     slider.addEventListener('change', () => {
       active.volume = Number(slider.value)
       void send({ action: 'volume', percent: Number(slider.value) })
     })
-    vol.append(icon('vol'), slider)
+    vol.append(icon('vol'), slider, level)
     popBox.appendChild(vol)
   }
   if (!popBox.isConnected) app.appendChild(popBox)
@@ -944,6 +995,7 @@ async function refresh(): Promise<void> {
   const answer = await request<PlayerView>('player.get')
   refreshing = false
   if (!answer) return
+  if (choosing) return
   if (answer.status === 'error') {
     if (!playerBox.isConnected) ensureShell()
     if (answer.message !== lastError) toast(answer.message)
