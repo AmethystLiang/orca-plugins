@@ -201,8 +201,8 @@
       "releases": [
         {
           "version": "1.0.0",
-          "commit": "dba4980f85592ced49db12757bc02dde0f1f3eba",
-          "contentHash": "2c9863aae067efcfa1b6a6b272d201db8c41c60403fb07c7f2b7b83dcd9e64b5",
+          "commit": "7d97e08869598dfa6f3b5f63c3fab93d4a6e20cc",
+          "contentHash": "cdbddb6ebee734440f9b7618756bcade4d49a5fa38ab7d236825fdf1f8db5a41",
           "execution": "trusted-worker",
           "minimumOrca": "1.4.248",
           "name": "Now Playing",
@@ -216,7 +216,25 @@
             "storage:own",
             "settings:own",
             "secrets:own"
-          ]
+          ],
+          "images": {
+            "cover": {
+              "path": "plugins/now-playing/media/cover.png",
+              "alt": "Now Playing in Orca's sidebar: a song with its cover art, the device menu open with volume, and search results",
+              "sha256": "325885cdb2807056f875a4d3d17c371641c7a55841b469c6b7d0e251bc25a973",
+              "width": 1600,
+              "height": 1000
+            },
+            "screenshots": [
+              {
+                "path": "plugins/now-playing/media/screens.png",
+                "alt": "Three panels: the Playlists tab, Search results for lantern, and the Queue",
+                "sha256": "b4bf0148d83fc287ad74f4024c08695384fae7a33c68c3a8343d42543e03bb0f",
+                "width": 1600,
+                "height": 1000
+              }
+            ]
+          }
         }
       ]
     }
