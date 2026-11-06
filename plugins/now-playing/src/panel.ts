@@ -1,6 +1,7 @@
 import { PANEL_CSS } from './panel-css'
-import type { AuthStart, Command, CommandResult, Device, LibraryView, ListView, NowPlaying, PlayerView, QueueView, Row, SearchView } from './protocol'
+import type { App, AuthStart, Command, CommandResult, Device, LibraryView, ListView, Setup, NowPlaying, PlayerView, QueueView, Row, SearchView } from './protocol'
 import { clock } from './spotify'
+import { waitText } from './client'
 
 const ICONS: Record<string, string> = {
   play: '<polygon points="7 4 20 12 7 20 7 4" fill="black"/>',
@@ -21,6 +22,8 @@ const ICONS: Record<string, string> = {
   music: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
   chev: '<polyline points="6 9 12 15 18 9"/>',
   back: '<polyline points="15 18 9 12 15 6"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  open: '<path d="M7 17 17 7"/><path d="M8 7h9v9"/>',
   close: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'
 }
 
@@ -33,7 +36,7 @@ const ICON_CSS = Object.entries(ICONS)
   .join('\n')
 
 type Tab = 'library' | 'queue'
-const POLL_MS = 5000
+const POLL_MS = 2000
 const RETRY_MS = 20_000
 const TAB_KEY = 'tab'
 
@@ -46,6 +49,7 @@ type Frame = {
 }
 
 const orca = (globalThis as unknown as { orca: Frame }).orca
+const MAC = /Mac/i.test(navigator.platform || navigator.userAgent)
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text?: string): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag)
@@ -73,7 +77,7 @@ function iconButton(name: string, label: string, onClick: () => void, cls = ''):
 const SPECIAL_ART: Record<string, string> = { liked: 'heartFull', dj: 'music', daylist: 'music' }
 
 function rowArt(row: Row): HTMLElement {
-  const special = SPECIAL_ART[row.kind]
+  const special = row.id === 'recent' ? 'clock' : SPECIAL_ART[row.kind]
   if (!special) return art(row.cover, row.kind === 'artist')
   const box = el('span', `art special ${row.kind}`)
   box.appendChild(icon(special))
@@ -124,7 +128,7 @@ function art(src: string | null, round = false): HTMLElement {
 function lazyImage(src: string | null, cls: string, box: HTMLElement): HTMLElement {
   if (src && src.startsWith('data:image/')) return imageEl(src, cls)
   box.dataset.cls = cls
-  if (!src || !src.startsWith('https://') || imageFailed.has(src)) return box
+  if (!src || !(src.startsWith('https://') || src.startsWith('music-art:')) || imageFailed.has(src)) return box
   const known = imageCache.get(src)
   if (known) return imageEl(known, cls)
   imageWaiters.set(src, [...(imageWaiters.get(src) ?? []), box])
@@ -148,6 +152,7 @@ let opened: { row: Row; list: ListView | null } | null = null
 let query = ''
 let search: SearchView | null = null
 let queue: QueueView | null = null
+let history: Row[] = []
 let devOpen = false
 let toastTimer: ReturnType<typeof setTimeout> | null = null
 let lastCover: string | null = null
@@ -188,7 +193,7 @@ async function request<T>(name: string, input?: unknown): Promise<T | null> {
   try {
     return (await orca.plugin.request(name, input)) as T
   } catch {
-    toast('The Spotify worker did not answer. Try again.')
+    toast('Now Playing did not answer. Try again.')
     return null
   }
 }
@@ -301,13 +306,31 @@ async function openUrl(url: string): Promise<boolean> {
   }
 }
 
-function renderSignedOut(text: string | null, needsClientId: boolean): void {
+function renderSignedOut(text: string | null, needsClientId: boolean, mac: boolean): void {
+  if (app.dataset.signedOut === `${needsClientId}:${mac}:${text}` && app.firstChild) return
+  app.dataset.signedOut = `${needsClientId}:${mac}:${text}`
   app.replaceChildren()
   const box = el('div', 'center')
   const logo = icon('music')
   logo.style.width = '36px'
   logo.style.height = '36px'
   logo.classList.add('m')
+  if (mac) {
+    box.append(logo, el('div', 'b', 'Open Spotify on this Mac'), el('div', 'm sm', 'Now Playing controls the Spotify app here. Nothing to set up.'))
+    const card = el('div', 'card')
+    card.append(el('div', 'b', 'Want Library, search and Queue?'), el('div', 'm sm', 'Connect your Spotify account. Optional, about 2 minutes. Also lets you control Spotify on your phone or another computer.'))
+    const go = el('button', 'cta small', needsClientId ? 'Set it up' : 'Sign in with Spotify')
+    go.addEventListener('click', () => {
+      if (!needsClientId) return void signIn(card)
+      go.remove()
+      renderSetup(card)
+    })
+    card.appendChild(go)
+    if (text) card.appendChild(el('div', 'sm', text))
+    box.appendChild(card)
+    app.appendChild(box)
+    return
+  }
   if (needsClientId) {
     box.appendChild(logo)
     renderSetup(box)
@@ -341,56 +364,221 @@ async function signIn(box: HTMLElement): Promise<void> {
   }
 }
 
-function ensureShell(): void {
-  if (playerBox.isConnected) return
-  app.replaceChildren(playerBox, tabsBox, listBox, footBox)
-  renderTabs()
-  loadTab()
-  renderList()
-  const signOut = el('button', 'link', 'Sign out of Spotify')
-  signOut.addEventListener('click', async () => {
-    await request('auth.signOut')
-    library = null
-    search = null
-    queue = null
-    opened = null
-    await refresh()
+const APP_LABEL: Record<App, string> = { spotify: 'Spotify', music: 'Apple Music' }
+let shellKey: string | null = null
+const apiLine = el('div', 'apiline m sm')
+
+function pausedMs(): number {
+  const ok = okView()
+  return ok?.app === 'spotify' && ok.setup === 'connected' ? ok.pausedMs : 0
+}
+
+function syncPaused(): void {
+  const ms = pausedMs()
+  apiLine.textContent = ms > 0 ? `Spotify API paused · back in ${waitText(ms)}` : ''
+  apiLine.hidden = ms === 0
+  searchBox.style.display = spotifyOffline() || (ms > 0 && !library?.savedAt) ? 'none' : ''
+}
+
+function okView(): Extract<PlayerView, { status: 'ok' }> | null {
+  return view?.status === 'ok' ? view : null
+}
+
+function currentApp(): App {
+  return okView()?.app ?? 'spotify'
+}
+
+function isLive(answer: PlayerView | null): boolean {
+  return answer?.status === 'ok' && (answer.app === 'music' || (answer.setup === 'connected' && answer.pausedMs === 0))
+}
+
+function spotifyOffline(): boolean {
+  const ok = okView()
+  return ok?.app === 'spotify' && ok.setup !== 'connected'
+}
+
+function hasQueue(): boolean {
+  const ok = okView()
+  return ok?.app === 'spotify' && ok.setup === 'connected' && ok.pausedMs === 0
+}
+
+function renderConnect(box: HTMLElement, setup: 'clientId' | 'signIn'): void {
+  const card = el('div', 'card wide')
+  card.append(el('div', 'b', 'Want your library, search and Queue?'), el('div', 'm sm', 'Connect your Spotify account to add them, plus devices and likes. Optional, about 2 minutes.'))
+  const go = el('button', 'cta small', setup === 'clientId' ? 'Set it up' : 'Sign in with Spotify')
+  go.addEventListener('click', () => {
+    if (setup === 'signIn') return void signIn(card)
+    go.remove()
+    renderSetup(card)
   })
-  footBox.replaceChildren(signOut)
+  card.appendChild(go)
+  box.appendChild(card)
+}
+
+function loadHistory(): void {
+  void request<Row[]>('history.get').then((rows) => {
+    history = Array.isArray(rows) ? rows : []
+    if (tab === 'library' && !opened && query.trim() === '') renderList()
+  })
+}
+
+function recentSection(): void {
+  if (history.length === 0) return
+  const key = 'recent'
+  listBox.appendChild(el('div', 'sec', 'Recently played'))
+  const open = expanded.has(key)
+  for (const row of open ? history : history.slice(0, 3)) listBox.appendChild(rowItem(row, () => void send({ action: 'playTrack', uri: row.uri }), { current: now()?.uri === row.uri }))
+  if (history.length > 3) {
+    const more = el('button', 'link more', open ? 'Show less' : `Show all ${history.length}`)
+    more.addEventListener('click', () => {
+      if (open) expanded.delete(key)
+      else expanded.add(key)
+      renderList()
+    })
+    listBox.appendChild(more)
+  }
+}
+
+function resetLists(): void {
+  history = []
+  library = null
+  search = null
+  queue = null
+  opened = null
+  query = ''
+  searchInput.value = ''
+  clearButton.hidden = true
+  expanded.clear()
+}
+
+async function chooseApp(next: App): Promise<void> {
+  const answer = await request<{ ok: boolean }>('app.set', { app: next })
+  if (!answer?.ok) return toast('Could not switch apps.')
+  resetLists()
+  shellKey = null
+  view = null
+  lastTrack = null
+  await refresh()
+}
+
+function renderChoose(mac: boolean): void {
+  if (app.dataset.choose === String(mac) && app.firstChild) return
+  shellKey = null
+  delete app.dataset.signedOut
+  app.dataset.choose = String(mac)
+  const box = el('div', 'center choose')
+  box.append(el('div', 'b big', 'Now Playing'), el('div', 'm sm', 'Which app do you listen with?'))
+  const tiles = el('div', 'tiles')
+  const tile = (which: App, sub: string): HTMLButtonElement => {
+    const button = el('button', `tile ${which}`)
+    const logo = el('span', 'logo')
+    logo.appendChild(icon('music'))
+    button.append(logo, el('span', 'b', APP_LABEL[which]), el('span', 'm sm', sub))
+    button.addEventListener('click', () => void chooseApp(which))
+    return button
+  }
+  tiles.appendChild(tile('spotify', 'DJ, queue, your library'))
+  if (mac) tiles.appendChild(tile('music', 'Player and your library'))
+  box.append(tiles, el('div', 'm sm', 'You can change this later at the bottom of the panel.'))
+  app.replaceChildren(box)
+}
+
+function renderFoot(): void {
+  const row = el('div', 'footrow')
+  footBox.replaceChildren(row)
+  const which = currentApp()
+  const left = el('div', 'appname m sm')
+  left.append(el('span', `appdot ${which}`), el('span', '', APP_LABEL[which]))
+  if (MAC) {
+    const other: App = which === 'spotify' ? 'music' : 'spotify'
+    const swap = el('button', 'link', `Switch to ${APP_LABEL[other]}`)
+    swap.addEventListener('click', () => void chooseApp(other))
+    left.append(el('span', '', '·'), swap)
+  }
+  row.appendChild(left)
+  const ok = okView()
+  if (ok?.app === 'spotify' && ok.setup === 'connected') {
+    const signOut = el('button', 'link m', 'Sign out')
+    signOut.addEventListener('click', async () => {
+      await request('auth.signOut')
+      resetLists()
+      shellKey = null
+      await refresh()
+    })
+    row.appendChild(signOut)
+  }
+}
+
+function ensureShell(): void {
+  const ok = okView()
+  const key = `${ok?.app}:${ok?.setup}:${hasQueue()}`
+  if (playerBox.isConnected && shellKey === key) return
+  const fresh = shellKey !== null && shellKey.split(':')[0] !== String(ok?.app)
+  shellKey = key
+  delete app.dataset.signedOut
+  delete app.dataset.choose
+  if (fresh) resetLists()
+  if (!hasQueue()) tab = 'library'
+  const paused = ok?.app === 'spotify' && ok.pausedMs > 0
+  const label = ok?.app === 'music' ? 'Search your library' : paused ? 'Search your saved library' : 'Search Spotify'
+  searchInput.placeholder = label
+  searchInput.setAttribute('aria-label', label)
+  app.replaceChildren(playerBox, tabsBox, listBox, footBox)
+  if (!hasQueue()) tabsBox.replaceWith(searchBox)
+  else renderTabs()
+  library = ok?.app === 'spotify' && ok.setup !== 'connected' ? null : library
+  loadTab()
+  loadHistory()
+  renderList()
+  renderFoot()
 }
 
 function renderPlayer(): void {
   const playing = now()
   const devices = view?.status === 'ok' ? view.devices : []
   playerBox.replaceChildren()
-  const head = el('div', 'head')
-  const placeholder = el('div', 'cover m')
+  app.dataset.app = currentApp()
+  const head = el('div', 'titlerow')
+  const placeholder = el('div', 'bigcover m')
   placeholder.appendChild(icon('music'))
-  const cover = lazyImage(playing?.cover ?? null, 'cover', placeholder)
+  playerBox.appendChild(playing ? lazyImage(playing.cover, 'bigcover', placeholder) : placeholder)
   const meta = el('div', 'meta')
   if (playing) {
-    meta.append(el('div', 'b clip', playing.name), el('div', 'm sm clip', playing.artists))
+    meta.append(el('div', 'title clip', playing.name), el('div', 'm clip', playing.artists))
     if (playing.album) meta.appendChild(el('div', 'm sm clip', playing.album))
   } else {
-    meta.append(el('div', 'b', 'Nothing playing'), el('div', 'm sm', devices.length > 0 ? 'Pick a playlist below.' : 'Open Spotify on your Mac or phone.'))
+    const hint = currentApp() === 'music' ? 'Play something in the Music app, or pick a playlist below.' : devices.length > 0 ? 'Pick a playlist below.' : 'Open Spotify on your Mac or phone.'
+    meta.append(el('div', 'b', 'Nothing playing'), el('div', 'm sm', hint))
   }
   const active = playing?.device ?? devices.find((device) => device.active) ?? null
+  const connected = isLive(view)
+  const chipRow = el('div', 'chiprow')
   if (active || devices.length > 0) {
-    const chip = el('button', 'dev')
-    chip.append(icon(active ? deviceIcon(active) : 'speaker'), el('span', 'clip', active ? active.name : 'Pick a device'), icon('chev'))
+    const chip = el('button', 'devbtn')
+    chip.title = active ? `Playing on ${active.name}` : 'Pick a device'
+    chip.setAttribute('aria-label', chip.title)
+    chip.appendChild(icon(active ? deviceIcon(active) : 'speaker'))
     chip.setAttribute('aria-expanded', devOpen ? 'true' : 'false')
     chip.addEventListener('click', (event) => {
       event.stopPropagation()
       devOpen = !devOpen
       renderPop()
+      if (devOpen) {
+        if (connected) void request<Device[]>('devices.get').then((list) => {
+          if (!list || list.length === 0 || view?.status !== 'ok') return
+          const own = (now()?.device ?? view.devices.find((device) => device.active))?.volume ?? null
+          view.devices = currentApp() === 'music' ? list.map((device) => (device.active && device.type === 'Computer' ? { ...device, volume: own } : device)) : list
+          renderPop()
+        })
+      }
     })
-    meta.appendChild(chip)
+    chipRow.appendChild(chip)
   }
-  head.append(cover, meta)
-  if (playing?.trackId) {
+  head.append(meta)
+  if (playing?.trackId && connected && playing.liked !== null) {
     const liked = playing.liked === true
     head.appendChild(
-      iconButton(liked ? 'heartFull' : 'heart', liked ? 'Remove from Liked Songs' : 'Save to Liked Songs', () => {
+      iconButton(liked ? 'heartFull' : 'heart', currentApp() === 'music' ? (liked ? 'Remove from Favourite Songs' : 'Add to Favourite Songs') : liked ? 'Remove from Liked Songs' : 'Save to Liked Songs', () => {
         if (!playing.trackId) return
         playing.liked = !liked
         renderPlayer()
@@ -401,7 +589,7 @@ function renderPlayer(): void {
   playerBox.appendChild(head)
   setTint(playing?.cover ? (imageCache.get(playing.cover) ?? null) : null)
 
-  if (playing) {
+  if (playing && playing.durationMs > 0) {
     const seek = el('div')
     const bar = el('div', 'bar')
     bar.setAttribute('role', 'slider')
@@ -423,6 +611,7 @@ function renderPlayer(): void {
   }
 
   const ctrls = el('div', 'ctrls')
+  if (MAC) ctrls.appendChild(iconButton('open', `Open ${APP_LABEL[currentApp()]}`, () => void send({ action: 'openApp' }), 'openbtn'))
   const shuffleOn = playing?.shuffle === true
   ctrls.appendChild(
     iconButton('shuffle', shuffleOn ? 'Shuffle on' : 'Shuffle off', () => {
@@ -454,6 +643,7 @@ function renderPlayer(): void {
       void send({ action: 'repeat', mode: nextRepeat })
     }, repeat === 'off' ? '' : 'on dot')
   )
+  while (chipRow.firstChild) ctrls.appendChild(chipRow.firstChild)
   playerBox.appendChild(ctrls)
   updateProgress()
   renderPop()
@@ -470,7 +660,9 @@ function updateProgress(): void {
 }
 
 function renderPop(): void {
-  const devices = view?.status === 'ok' ? view.devices : []
+  const listed = view?.status === 'ok' ? view.devices : []
+  const own = now()?.device ?? null
+  const devices = listed.length > 0 ? listed : own ? [own] : []
   if (!devOpen || devices.length === 0) {
     popBox.remove()
     return
@@ -505,11 +697,11 @@ function renderPop(): void {
     popBox.appendChild(vol)
   }
   if (!popBox.isConnected) app.appendChild(popBox)
-  const chip = playerBox.querySelector('.dev')
+  const chip = playerBox.querySelector('.devbtn')
   if (chip) {
     const at = chip.getBoundingClientRect()
     popBox.style.top = `${Math.round(at.bottom + 4)}px`
-    popBox.style.left = `${Math.round(at.left)}px`
+    popBox.style.left = `${Math.max(12, Math.min(window.innerWidth - popBox.offsetWidth - 12, Math.round(at.right - popBox.offsetWidth)))}px`
   }
 }
 
@@ -553,6 +745,14 @@ function rowItem(row: Row, onPlay: () => void, extra?: { queue?: boolean; curren
     if (event.key === 'Enter') main()
   })
   return item
+}
+
+function ago(at: number): string {
+  const minutes = Math.max(0, Math.round((Date.now() - at) / 60_000))
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.round(minutes / 60)
+  return hours < 48 ? `${hours}h ago` : `${Math.round(hours / 24)}d ago`
 }
 
 function note(text: string): HTMLElement {
@@ -607,10 +807,18 @@ function renderOpened(current: { row: Row; list: ListView | null }): void {
 function renderList(): void {
   listBox.replaceChildren()
   if (tab === 'library') {
+    const ok = okView()
+    if (ok?.app === 'spotify' && ok.setup !== 'connected') {
+      if (MAC) listBox.append(el('div', 'sec', 'Made for you'), libraryRow({ kind: 'dj', id: 'dj', uri: 'spotify:playlist:37i9dQZF1EYkqdzj48dyYq', name: 'DJ', sub: 'Plays in the Spotify app on this Mac', cover: null }))
+      recentSection()
+      return renderConnect(listBox, ok.setup === 'signIn' ? 'signIn' : 'clientId')
+    }
     if (opened) return renderOpened(opened)
     if (query.trim() !== '') return renderSearch()
     if (!library) return void listBox.appendChild(note('Loading your library…'))
-    if (library.message) return void listBox.appendChild(note(library.message))
+    syncPaused()
+    if (library.message && pausedMs() === 0) listBox.appendChild(note(library.message))
+    if (library.savedAt && pausedMs() === 0) listBox.appendChild(note(`Your library from ${ago(library.savedAt)}.`))
     if (library.needsReauth) {
       const box = el('div', 'note m sm')
       const again = el('button', 'link', 'Sign in again')
@@ -625,6 +833,7 @@ function renderList(): void {
       ['albums', 'Albums', library.albums]
     ]
     for (const [key, label, list] of sections) {
+      if (key === 'playlists') recentSection()
       if (list.length === 0) continue
       listBox.appendChild(el('div', 'sec', label))
       const open = expanded.has(key) || list.length <= SHOW_ROWS + 1
@@ -639,6 +848,7 @@ function renderList(): void {
         listBox.appendChild(more)
       }
     }
+    if (pausedMs() > 0) listBox.appendChild(apiLine)
     return
   }
   renderQueue()
@@ -734,29 +944,44 @@ async function refresh(): Promise<void> {
   const answer = await request<PlayerView>('player.get')
   refreshing = false
   if (!answer) return
-  view = answer
-  viewAt = Date.now()
-  if (answer.status === 'signedOut') {
-    playerBox.remove()
-    renderSignedOut(answer.message, answer.needsClientId)
-    return
-  }
   if (answer.status === 'error') {
-    ensureShell()
+    if (!playerBox.isConnected) ensureShell()
     if (answer.message !== lastError) toast(answer.message)
     lastError = answer.message
     return
   }
+  view = answer
+  viewAt = Date.now()
+  if (answer.status === 'choose') {
+    playerBox.remove()
+    renderChoose(answer.mac)
+    return
+  }
+  if (answer.status === 'signedOut') {
+    playerBox.remove()
+    shellKey = null
+    renderSignedOut(answer.message, answer.needsClientId, answer.mac)
+    return
+  }
   lastError = null
   ensureShell()
+  syncPaused()
   renderPlayer()
   if (tab === 'library' && library?.message && Date.now() - libraryAt > RETRY_MS) {
     library = null
     loadTab()
+  } else if (library?.savedAt && answer.pausedMs === 0 && Date.now() - libraryAt > RETRY_MS) {
+    libraryAt = Date.now()
+    void request<LibraryView>('library.get').then((answer) => {
+      if (!answer || answer.savedAt || answer.message) return
+      library = answer
+      if (tab === 'library' && !opened && query.trim() === '') renderList()
+    })
   }
   const track = answer.now?.uri ?? null
   if (track !== lastTrack) {
     lastTrack = track
+    if (answer.app === 'spotify') setTimeout(loadHistory, 300)
     if (tab === 'queue') loadTab()
     else if (query.trim() === '' || search) renderList()
   }

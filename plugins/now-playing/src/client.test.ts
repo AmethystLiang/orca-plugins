@@ -1,5 +1,5 @@
 import { assert, test } from 'orca/testing'
-import { SpotifyClient, SpotifyError, type FetchFn } from './client'
+import { SpotifyClient, SpotifyError, waitText, type FetchFn } from './client'
 
 type Reply = { status: number; body?: unknown; retryAfter?: string }
 
@@ -95,7 +95,7 @@ test('a 429 waits out Retry-After without calling Spotify again', async () => {
   const h = harness([token('a1'), { status: 429, retryAfter: '7' }, { status: 200, body: { ok: true } }])
   const first = await h.client.get('/me/player').catch((e: unknown) => e)
   assert.ok(first instanceof SpotifyError && first.status === 429)
-  assert.equal(first.message, 'Spotify asked us to slow down. Trying again in 7s.')
+  assert.equal(first.message, "Spotify's API is paused for 7s (Spotify's rate limit). The player and DJ still work.")
   const calls = h.calls.length
   h.advance(6_000)
   const second = await h.client.get('/me/player').catch((e: unknown) => e)
@@ -103,4 +103,40 @@ test('a 429 waits out Retry-After without calling Spotify again', async () => {
   assert.equal(h.calls.length, calls)
   h.advance(1_500)
   assert.deepEqual(await h.client.get('/me/player'), { ok: true })
+})
+
+test('the wait reads in seconds, minutes or hours', () => {
+  assert.equal(waitText(7_000), '7s')
+  assert.equal(waitText(492_000), '9m')
+  assert.equal(waitText(9_600_000), '2h 40m')
+  assert.equal(waitText(7_200_000), '2h')
+})
+
+test('a long Retry-After is honored, not cut to ten minutes', async () => {
+  const h = harness([token('a1'), { status: 429, retryAfter: '9600' }])
+  await h.client.get('/me/player').catch(() => null)
+  assert.equal(h.client.pausedFor(), 9_600_000)
+  h.advance(3_600_000)
+  const error = await h.client.get('/me/player').catch((e: unknown) => e)
+  assert.ok(error instanceof SpotifyError && error.message.includes('1h 40m'))
+})
+
+test('a pause survives a restart, so a new worker never calls Spotify during it', async () => {
+  let saved: unknown = null
+  const pauses = { get: async () => saved, set: async (until: number) => void (saved = until) }
+  const calls: string[] = []
+  const fetch: FetchFn = async (url) => {
+    calls.push(url)
+    const limited = url.includes('/v1/')
+    return { ok: !limited, status: limited ? 429 : 200, headers: { get: (name: string) => (name === 'retry-after' && limited ? '9600' : null) }, json: async () => ({ access_token: 'a', expires_in: 3600 }), arrayBuffer: async () => new ArrayBuffer(0) }
+  }
+  const make = () => new SpotifyClient({ fetch, now: () => 1000, clientId: async () => 'cid', vault: { get: async () => 'r1', set: async () => undefined, clear: async () => undefined }, pauses })
+  await make().get('/me').catch(() => null)
+  assert.equal(saved, 1000 + 9_600_000)
+  const before = calls.length
+  const restarted = make()
+  const error = await restarted.get('/me').catch((e: unknown) => e)
+  assert.ok(error instanceof SpotifyError && error.status === 429)
+  assert.equal(calls.length, before)
+  assert.equal(restarted.pausedFor(), 9_600_000)
 })

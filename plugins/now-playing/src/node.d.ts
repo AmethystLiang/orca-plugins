@@ -13,7 +13,7 @@ declare module 'node:http' {
 }
 
 declare module 'node:child_process' {
-  export function execFile(file: string, args: readonly string[], options: { timeout?: number }, callback: (error: Error | null, stdout: string, stderr: string) => void): unknown
+  export function execFile(file: string, args: readonly string[], options: { timeout?: number; maxBuffer?: number }, callback: (error: Error | null, stdout: string, stderr: string) => void): unknown
 }
 
 declare const process: { readonly platform: string }

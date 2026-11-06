@@ -14,8 +14,18 @@ export type Vault = {
   clear(): Promise<void>
 }
 
+export function waitText(ms: number): string {
+  const seconds = Math.max(1, Math.ceil(ms / 1000))
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.ceil(seconds / 60)
+  if (minutes < 60) return `${minutes}m`
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  return rest === 0 ? `${hours}h` : `${hours}h ${rest}m`
+}
+
 export function slowDown(ms: number): string {
-  return `Spotify asked us to slow down. Trying again in ${Math.ceil(ms / 1000)}s.`
+  return `Spotify's API is paused for ${waitText(ms)} (Spotify's rate limit). The player and DJ still work.`
 }
 
 export class SpotifyError extends Error {
@@ -28,7 +38,8 @@ export class SpotifyError extends Error {
   }
 }
 
-export type ClientDeps = { fetch: FetchFn; vault: Vault; clientId: () => Promise<string>; now: () => number }
+export type PauseStore = { get(): Promise<unknown>; set(until: number): Promise<void> }
+export type ClientDeps = { fetch: FetchFn; vault: Vault; clientId: () => Promise<string>; now: () => number; pauses?: PauseStore }
 
 const API = 'https://api.spotify.com/v1'
 const TOKEN_URL = 'https://accounts.spotify.com/api/token'
@@ -37,8 +48,21 @@ export class SpotifyClient {
   private access: { token: string; until: number } | null = null
   private refreshing: Promise<string> | null = null
   private blockedUntil = 0
+  private pauseLoaded: Promise<void> | null = null
 
   constructor(private readonly deps: ClientDeps) {}
+
+  ready(): Promise<void> {
+    this.pauseLoaded ??= (async () => {
+      const saved = await this.deps.pauses?.get().catch(() => null)
+      if (typeof saved === 'number' && Number.isFinite(saved) && saved > this.blockedUntil) this.blockedUntil = Math.min(saved, this.deps.now() + 86_400_000)
+    })()
+    return this.pauseLoaded
+  }
+
+  pausedFor(): number {
+    return Math.max(0, this.blockedUntil - this.deps.now())
+  }
 
   async signedIn(): Promise<boolean> {
     return (await this.deps.vault.get()) !== null
@@ -89,6 +113,7 @@ export class SpotifyClient {
   }
 
   async call(request: ApiCall, retried = false): Promise<unknown> {
+    await this.ready()
     const wait = this.blockedUntil - this.deps.now()
     if (wait > 0) throw new SpotifyError(slowDown(wait), 429)
     const token = await this.token()
@@ -105,8 +130,9 @@ export class SpotifyClient {
     }
     if (response.status === 429) {
       const seconds = Number(response.headers.get('retry-after'))
-      const ms = Math.min(Math.max(Number.isFinite(seconds) && seconds > 0 ? seconds : 5, 1), 600) * 1000
+      const ms = Math.min(Math.max(Number.isFinite(seconds) && seconds > 0 ? seconds : 5, 1), 86_400) * 1000
       this.blockedUntil = this.deps.now() + ms
+      await this.deps.pauses?.set(this.blockedUntil).catch(() => undefined)
       throw new SpotifyError(slowDown(ms), 429)
     }
     if (response.status === 204 || response.status === 202) return null

@@ -27,7 +27,7 @@ test('the player answer maps to now playing', () => {
     name: 'Holocene',
     artists: 'Bon Iver, Guest',
     album: 'Bon Iver, Bon Iver',
-    cover: 'https://i.scdn.co/300',
+    cover: 'https://i.scdn.co/640',
     durationMs: 336000,
     progressMs: 1000,
     isPlaying: true,
@@ -53,6 +53,7 @@ test('pickImage takes the smallest image at least 64 wide, else the last one', (
   assert.equal(pickImage([{ url: 'https://i.scdn.co/a', width: 40 }, { url: 'https://i.scdn.co/b', width: 30 }]), 'https://i.scdn.co/b')
   assert.equal(pickImage([{ url: 'https://i.scdn.co/a' }]), 'https://i.scdn.co/a')
   assert.equal(pickImage(track.album.images, 128), 'https://i.scdn.co/300')
+  assert.equal(pickImage(track.album.images, 400), 'https://i.scdn.co/640')
   assert.equal(pickImage([]), null)
   assert.equal(pickImage('nope'), null)
 })

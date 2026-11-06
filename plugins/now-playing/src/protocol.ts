@@ -28,16 +28,21 @@ export type Row = {
   cover: string | null
 }
 
+export type Setup = 'connected' | 'clientId' | 'signIn'
+
+export type App = 'spotify' | 'music'
+
 export type PlayerView =
-  | { status: 'signedOut'; message: string | null; needsClientId: boolean }
-  | { status: 'ok'; now: NowPlaying | null; devices: Device[]; checkedAt: number }
+  | { status: 'signedOut'; message: string | null; needsClientId: boolean; mac: boolean }
+  | { status: 'choose'; mac: boolean }
+  | { status: 'ok'; app: App; now: NowPlaying | null; devices: Device[]; checkedAt: number; setup: Setup; pausedMs: number }
   | { status: 'error'; message: string }
 
-export type ListView = { rows: Row[]; message: string | null }
+export type ListView = { rows: Row[]; message: string | null; savedAt?: number | null }
 
-export type LibraryView = { made: Row[]; playlists: Row[]; artists: Row[]; albums: Row[]; needsReauth: boolean; message: string | null }
+export type LibraryView = { made: Row[]; playlists: Row[]; artists: Row[]; albums: Row[]; needsReauth: boolean; message: string | null; savedAt?: number | null }
 
-export type SearchView = { songs: Row[]; artists: Row[]; albums: Row[]; playlists: Row[]; message: string | null }
+export type SearchView = { songs: Row[]; artists: Row[]; albums: Row[]; playlists: Row[]; message: string | null; savedAt?: number | null }
 
 export type QueueView = { now: Row | null; next: Row[]; message: string | null }
 
@@ -56,6 +61,7 @@ export type Command =
   | { action: 'playTrack'; uri: string }
   | { action: 'queue'; uri: string }
   | { action: 'dj' }
+  | { action: 'openApp' }
 
 export type CommandResult = { ok: true } | { ok: false; message: string }
 

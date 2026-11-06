@@ -1,6 +1,6 @@
 import type { Command, Device, NowPlaying, RepeatMode, Row } from './protocol'
 
-export const PLAYER_COVER_PX = 128
+export const PLAYER_COVER_PX = 400
 export const REDIRECT_PORT = 8888
 export const REDIRECT_URI = `http://127.0.0.1:${REDIRECT_PORT}/callback`
 export const SCOPES = [
@@ -199,6 +199,7 @@ export function commandCall(command: Command, deviceId: string | null): ApiCall 
     case 'playTrack':
       return { method: 'PUT', path: withDevice('/me/player/play'), body: { uris: [command.uri] } }
     case 'dj':
+    case 'openApp':
       return null
     case 'queue':
       return { method: 'POST', path: withDevice(`/me/player/queue?uri=${enc(command.uri)}`) }
@@ -206,8 +207,8 @@ export function commandCall(command: Command, deviceId: string | null): ApiCall 
   return null
 }
 
-const ACTIONS = new Set(['play', 'pause', 'next', 'previous', 'seek', 'shuffle', 'repeat', 'volume', 'transfer', 'like', 'playContext', 'playTrack', 'queue', 'dj'])
-const URI = /^spotify(:[A-Za-z0-9._-]{1,64}){2,4}$/
+const ACTIONS = new Set(['play', 'pause', 'next', 'previous', 'seek', 'shuffle', 'repeat', 'volume', 'transfer', 'like', 'playContext', 'playTrack', 'queue', 'dj', 'openApp'])
+const URI = /^(spotify(:[A-Za-z0-9._-]{1,64}){2,4}|music:(track|playlist|album|artist|liked|recent):[A-Za-z0-9]{1,64})$/
 const ID = /^[A-Za-z0-9]{1,64}$/
 
 export function parseCommand(input: unknown): Command | null {
