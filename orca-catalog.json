@@ -201,8 +201,8 @@
       "releases": [
         {
           "version": "1.0.0",
-          "commit": "7d97e08869598dfa6f3b5f63c3fab93d4a6e20cc",
-          "contentHash": "cdbddb6ebee734440f9b7618756bcade4d49a5fa38ab7d236825fdf1f8db5a41",
+          "commit": "7f724359f7bc192463184e102ebf477dd9569ccd",
+          "contentHash": "a1d84059ee41163d58a592004b54495fbce206ec3bc53290159bdf5090e3a693",
           "execution": "trusted-worker",
           "minimumOrca": "1.4.248",
           "name": "Now Playing",
