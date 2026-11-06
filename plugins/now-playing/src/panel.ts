@@ -1,5 +1,5 @@
 import { PANEL_CSS } from './panel-css'
-import type { AuthStart, Command, CommandResult, Device, ListView, NowPlaying, PlayerView, QueueView, Row, SearchView } from './protocol'
+import type { AuthStart, Command, CommandResult, Device, LibraryView, ListView, NowPlaying, PlayerView, QueueView, Row, SearchView } from './protocol'
 import { clock } from './spotify'
 
 const ICONS: Record<string, string> = {
@@ -20,7 +20,8 @@ const ICONS: Record<string, string> = {
   addq: '<path d="M3 6h13M3 12h13M3 18h9"/><path d="M19 15v6M16 18h6"/>',
   music: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
   chev: '<polyline points="6 9 12 15 18 9"/>',
-  back: '<polyline points="15 18 9 12 15 6"/>'
+  back: '<polyline points="15 18 9 12 15 6"/>',
+  close: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'
 }
 
 const ICON_CSS = Object.entries(ICONS)
@@ -31,7 +32,7 @@ const ICON_CSS = Object.entries(ICONS)
   })
   .join('\n')
 
-type Tab = 'search' | 'playlists' | 'queue'
+type Tab = 'library' | 'queue'
 const POLL_MS = 3000
 const TAB_KEY = 'tab'
 
@@ -68,14 +69,60 @@ function iconButton(name: string, label: string, onClick: () => void, cls = ''):
   return button
 }
 
-function art(src: string | null, round = false): HTMLElement {
-  if (src && src.startsWith('data:image/')) {
-    const img = el('img', `art${round ? ' round' : ''}`)
-    img.src = src
-    img.alt = ''
-    return img
+const SPECIAL_ART: Record<string, string> = { liked: 'heartFull', dj: 'music', daylist: 'music' }
+
+function rowArt(row: Row): HTMLElement {
+  const special = SPECIAL_ART[row.kind]
+  if (!special) return art(row.cover, row.kind === 'artist')
+  const box = el('span', `art special ${row.kind}`)
+  box.appendChild(icon(special))
+  return box
+}
+
+const imageCache = new Map<string, string>()
+const imageFailed = new Set<string>()
+const imageInFlight = new Set<string>()
+const imageWaiters = new Map<string, HTMLElement[]>()
+let imageTimer: ReturnType<typeof setTimeout> | null = null
+
+function imageEl(data: string, round: boolean): HTMLImageElement {
+  const img = el('img', `art${round ? ' round' : ''}`)
+  img.src = data
+  img.alt = ''
+  return img
+}
+
+function scheduleImages(delay: number): void {
+  if (!imageTimer && [...imageWaiters.keys()].some((url) => !imageInFlight.has(url))) imageTimer = setTimeout(() => void loadImages(), delay)
+}
+
+async function loadImages(): Promise<void> {
+  imageTimer = null
+  const urls = [...imageWaiters.keys()].filter((url) => !imageInFlight.has(url)).slice(0, 12)
+  if (urls.length === 0) return
+  for (const url of urls) imageInFlight.add(url)
+  const answer = await request<Record<string, string | null>>('images.get', { urls })
+  for (const url of urls) {
+    const data = answer?.[url]
+    if (typeof data === 'string' && data.startsWith('data:image/')) {
+      imageCache.set(url, data)
+      for (const box of imageWaiters.get(url) ?? []) if (box.isConnected) box.replaceWith(imageEl(data, box.classList.contains('round')))
+    } else imageFailed.add(url)
+    imageWaiters.delete(url)
+    imageInFlight.delete(url)
   }
-  return el('span', `art${round ? ' round' : ''}`)
+  scheduleImages(0)
+}
+
+function art(src: string | null, round = false): HTMLElement {
+  if (src && src.startsWith('data:image/')) return imageEl(src, round)
+  const box = el('span', `art${round ? ' round' : ''}`)
+  if (!src || !src.startsWith('https://') || imageFailed.has(src)) return box
+  const known = imageCache.get(src)
+  if (known) return imageEl(known, round)
+  imageWaiters.set(src, [...(imageWaiters.get(src) ?? []), box])
+  scheduleImages(30)
+  return box
 }
 
 const style = el('style')
@@ -87,8 +134,9 @@ document.body.appendChild(app)
 
 let view: PlayerView | null = null
 let viewAt = 0
-let tab: Tab = 'playlists'
-let playlists: ListView | null = null
+let tab: Tab = 'library'
+let library: LibraryView | null = null
+const expanded = new Set<string>()
 let opened: { row: Row; list: ListView | null } | null = null
 let query = ''
 let search: SearchView | null = null
@@ -105,9 +153,22 @@ const listBox = el('div', 'list')
 const footBox = el('div', 'foot')
 const toastBox = el('div', 'toast')
 const popBox = el('div', 'pop')
-searchInput.placeholder = 'Search songs, artists, albums, playlists'
+searchInput.placeholder = 'Search Spotify'
 searchInput.setAttribute('aria-label', 'Search Spotify')
-searchBox.append(icon('search'), searchInput)
+const clearButton = iconButton('close', 'Clear search', () => clearSearch())
+clearButton.classList.add('clear')
+clearButton.hidden = true
+searchBox.append(icon('search'), searchInput, clearButton)
+
+function clearSearch(): void {
+  searchInput.value = ''
+  query = ''
+  search = null
+  searchSeq += 1
+  clearButton.hidden = true
+  renderList()
+  searchInput.focus()
+}
 
 function toast(text: string): void {
   toastBox.textContent = text
@@ -282,7 +343,7 @@ function ensureShell(): void {
   const signOut = el('button', 'link', 'Sign out of Spotify')
   signOut.addEventListener('click', async () => {
     await request('auth.signOut')
-    playlists = null
+    library = null
     search = null
     queue = null
     opened = null
@@ -453,8 +514,7 @@ function renderPop(): void {
 function renderTabs(): void {
   tabsBox.replaceChildren()
   const labels: [Tab, string][] = [
-    ['search', 'Search'],
-    ['playlists', 'Playlists'],
+    ['library', 'Library'],
     ['queue', 'Queue']
   ]
   for (const [key, label] of labels) {
@@ -462,17 +522,16 @@ function renderTabs(): void {
     button.setAttribute('role', 'tab')
     button.setAttribute('aria-selected', tab === key ? 'true' : 'false')
     button.addEventListener('click', () => {
-      if (tab === key && key === 'playlists' && opened) opened = null
+      if (tab === key && key === 'library' && opened) opened = null
       tab = key
       void orca.storage.set(TAB_KEY, key).catch(() => undefined)
       renderTabs()
       loadTab()
       renderList()
-      if (key === 'search') searchInput.focus()
     })
     tabsBox.appendChild(button)
   }
-  if (tab === 'search') {
+  if (tab === 'library') {
     if (!searchBox.isConnected) tabsBox.after(searchBox)
   } else searchBox.remove()
 }
@@ -483,7 +542,7 @@ function rowItem(row: Row, onPlay: () => void, extra?: { queue?: boolean; curren
   item.tabIndex = 0
   const text = el('div', 't')
   text.append(el('span', 'clip', row.name), el('span', 'm sm clip', row.sub))
-  item.append(art(row.cover, row.kind === 'artist'), text)
+  item.append(rowArt(row), text)
   if (extra?.queue) item.appendChild(iconButton('addq', 'Add to queue', () => void send({ action: 'queue', uri: row.uri }).then((ok) => ok && toast(`Added "${row.name}" to the queue.`)), 'act'))
   if (extra?.onOpen) item.appendChild(iconButton('play', `Play ${row.name}`, onPlay, 'act'))
   const main = extra?.onOpen ?? onPlay
@@ -498,51 +557,93 @@ function note(text: string): HTMLElement {
   return el('div', 'note m sm', text)
 }
 
+const SHOW_ROWS = 5
+const OPENS = new Set(['playlist', 'album', 'artist', 'liked'])
+
+function libraryRow(row: Row): HTMLElement {
+  if (row.kind === 'dj') return rowItem(row, () => void send({ action: 'dj' }))
+  const play = (): void => void send({ action: 'playContext', contextUri: row.uri })
+  if (!OPENS.has(row.kind)) return rowItem(row, play)
+  return rowItem(row, play, {
+    onOpen: () => {
+      opened = { row, list: null }
+      renderList()
+      listBox.scrollTop = 0
+      void request<ListView>('tracks.get', { kind: row.kind, id: row.id }).then((list) => {
+        if (opened?.row !== row) return
+        opened.list = list ?? { rows: [], message: 'Could not load the songs.' }
+        renderList()
+      })
+    }
+  })
+}
+
+function renderOpened(current: { row: Row; list: ListView | null }): void {
+  const parent = current.row
+  const head = el('div', 'item')
+  head.append(
+    iconButton('back', query.trim() === '' ? 'Back to your library' : 'Back to search results', () => {
+      opened = null
+      renderList()
+    }),
+    rowArt(parent)
+  )
+  const text = el('div', 't')
+  text.append(el('span', 'b clip', parent.name), el('span', 'm sm clip', parent.sub))
+  head.append(text, iconButton('play', `Play ${parent.name}`, () => void send({ action: 'playContext', contextUri: parent.uri }), 'play'))
+  listBox.appendChild(head)
+  if (!current.list) return void listBox.appendChild(note('Loading songs…'))
+  if (current.list.message) return void listBox.appendChild(note(current.list.message))
+  if (current.list.rows.length === 0) return void listBox.appendChild(note('Nothing here yet.'))
+  for (const song of current.list.rows) {
+    const row = song.cover === null && parent.kind === 'album' ? { ...song, cover: parent.cover } : song
+    const play = parent.kind === 'artist' ? (): void => void send({ action: 'playTrack', uri: row.uri }) : (): void => void send({ action: 'playContext', contextUri: parent.uri, offsetUri: row.uri })
+    listBox.appendChild(rowItem(row, play, { queue: true, current: now()?.uri === row.uri }))
+  }
+}
+
 function renderList(): void {
   listBox.replaceChildren()
-  if (tab === 'playlists') {
-    if (opened) {
-      const current = opened
-      const head = el('div', 'item')
-      head.append(
-        iconButton('back', 'Back to playlists', () => {
-          opened = null
-          renderList()
-        }),
-        art(current.row.cover)
-      )
-      const text = el('div', 't')
-      text.append(el('span', 'b clip', current.row.name), el('span', 'm sm clip', current.row.sub))
-      head.append(text, iconButton('play', `Play ${current.row.name}`, () => void send({ action: 'playContext', contextUri: current.row.uri }), 'play'))
-      listBox.appendChild(head)
-      if (!current.list) listBox.appendChild(note('Loading songs…'))
-      else if (current.list.message) listBox.appendChild(note(current.list.message))
-      else if (current.list.rows.length === 0) listBox.appendChild(note('This playlist is empty.'))
-      else for (const row of current.list.rows) listBox.appendChild(rowItem(row, () => void send({ action: 'playContext', contextUri: current.row.uri, offsetUri: row.uri }), { queue: true, current: now()?.uri === row.uri }))
-      return
+  if (tab === 'library') {
+    if (opened) return renderOpened(opened)
+    if (query.trim() !== '') return renderSearch()
+    if (!library) return void listBox.appendChild(note('Loading your library…'))
+    if (library.message) return void listBox.appendChild(note(library.message))
+    if (library.needsReauth) {
+      const box = el('div', 'note m sm')
+      const again = el('button', 'link', 'Sign in again')
+      again.addEventListener('click', () => void signIn(box))
+      box.append(el('div', '', 'Sign in again to show your artists, albums and daylist.'), again)
+      listBox.appendChild(box)
     }
-    if (!playlists) return void listBox.appendChild(note('Loading playlists…'))
-    if (playlists.message) listBox.appendChild(note(playlists.message))
-    if (!playlists.message && playlists.rows.length === 0) listBox.appendChild(note('You have no playlists yet.'))
-    for (const row of playlists.rows) {
-      listBox.appendChild(
-        rowItem(row, () => void send({ action: 'playContext', contextUri: row.uri }), {
-          onOpen: () => {
-            opened = { row, list: null }
-            renderList()
-            void request<ListView>('playlist.tracks', { id: row.id }).then((list) => {
-              if (opened?.row.id !== row.id) return
-              opened.list = list ?? { rows: [], message: 'Could not load this playlist.' }
-              renderList()
-            })
-          }
+    const sections: [string, string, Row[]][] = [
+      ['made', 'Made for you', library.made],
+      ['playlists', 'Playlists', library.playlists],
+      ['artists', 'Artists', library.artists],
+      ['albums', 'Albums', library.albums]
+    ]
+    for (const [key, label, list] of sections) {
+      if (list.length === 0) continue
+      listBox.appendChild(el('div', 'sec', label))
+      const open = expanded.has(key) || list.length <= SHOW_ROWS + 1
+      for (const row of open ? list : list.slice(0, SHOW_ROWS)) listBox.appendChild(libraryRow(row))
+      if (list.length > SHOW_ROWS + 1) {
+        const more = el('button', 'link more', open ? 'Show less' : `Show all ${list.length}`)
+        more.addEventListener('click', () => {
+          if (open) expanded.delete(key)
+          else expanded.add(key)
+          renderList()
         })
-      )
+        listBox.appendChild(more)
+      }
     }
     return
   }
-  if (tab === 'search') {
-    if (query.trim() === '') return void listBox.appendChild(note('Type to search Spotify.'))
+  renderQueue()
+}
+
+function renderSearch(): void {
+  {
     if (!search) return void listBox.appendChild(note('Searching…'))
     if (search.message) return void listBox.appendChild(note(search.message))
     const sections: [string, Row[]][] = [
@@ -558,15 +659,15 @@ function renderList(): void {
       listBox.appendChild(el('div', 'sec', label))
       for (const row of list) {
         listBox.appendChild(
-          row.kind === 'track'
-            ? rowItem(row, () => void send({ action: 'playTrack', uri: row.uri }), { queue: true, current: now()?.uri === row.uri })
-            : rowItem(row, () => void send({ action: 'playContext', contextUri: row.uri }))
+          row.kind === 'track' ? rowItem(row, () => void send({ action: 'playTrack', uri: row.uri }), { queue: true, current: now()?.uri === row.uri }) : libraryRow(row)
         )
       }
     }
     if (!any) listBox.appendChild(note(`Nothing found for "${query.trim()}".`))
-    return
   }
+}
+
+function renderQueue(): void {
   if (!queue) return void listBox.appendChild(note('Loading the queue…'))
   if (queue.message) return void listBox.appendChild(note(queue.message))
   if (queue.now) {
@@ -579,10 +680,10 @@ function renderList(): void {
 }
 
 function loadTab(): void {
-  if (tab === 'playlists' && !playlists) {
-    void request<ListView>('playlists.get').then((list) => {
-      playlists = list ?? { rows: [], message: 'Could not load your playlists.' }
-      if (tab === 'playlists') renderList()
+  if (tab === 'library' && !library) {
+    void request<LibraryView>('library.get').then((answer) => {
+      library = answer ?? { made: [], playlists: [], artists: [], albums: [], needsReauth: false, message: 'Could not load your library.' }
+      if (tab === 'library') renderList()
     })
   }
   if (tab === 'queue') {
@@ -595,8 +696,16 @@ function loadTab(): void {
 
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 let searchSeq = 0
+searchInput.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && searchInput.value !== '') {
+    event.stopPropagation()
+    clearSearch()
+  }
+})
 searchInput.addEventListener('input', () => {
   query = searchInput.value
+  clearButton.hidden = query === ''
+  opened = null
   if (searchTimer) clearTimeout(searchTimer)
   search = null
   renderList()
@@ -606,7 +715,7 @@ searchInput.addEventListener('input', () => {
     void request<SearchView>('search', { q: query }).then((answer) => {
       if (seq !== searchSeq) return
       search = answer ?? { songs: [], artists: [], albums: [], playlists: [], message: 'Search failed.' }
-      if (tab === 'search') renderList()
+      if (tab === 'library') renderList()
     })
   }, 300)
 })
@@ -640,7 +749,7 @@ async function refresh(): Promise<void> {
   if (track !== lastTrack) {
     lastTrack = track
     if (tab === 'queue') loadTab()
-    else if (tab !== 'search' || search) renderList()
+    else if (query.trim() === '' || search) renderList()
   }
 }
 
@@ -666,7 +775,7 @@ void orca.storage
   .get(TAB_KEY)
   .catch(() => null)
   .then((saved) => {
-    if (saved === 'search' || saved === 'playlists' || saved === 'queue') tab = saved
+    if (saved === 'library' || saved === 'queue') tab = saved
     return refresh()
   })
 

@@ -9,7 +9,9 @@ export const SCOPES = [
   'playlist-read-private',
   'playlist-read-collaborative',
   'user-library-read',
-  'user-library-modify'
+  'user-library-modify',
+  'user-follow-read',
+  'user-read-recently-played'
 ]
 
 export function base64url(bytes: Uint8Array): string {
@@ -195,13 +197,15 @@ export function commandCall(command: Command, deviceId: string | null): ApiCall 
       }
     case 'playTrack':
       return { method: 'PUT', path: withDevice('/me/player/play'), body: { uris: [command.uri] } }
+    case 'dj':
+      return null
     case 'queue':
       return { method: 'POST', path: withDevice(`/me/player/queue?uri=${enc(command.uri)}`) }
   }
   return null
 }
 
-const ACTIONS = new Set(['play', 'pause', 'next', 'previous', 'seek', 'shuffle', 'repeat', 'volume', 'transfer', 'like', 'playContext', 'playTrack', 'queue'])
+const ACTIONS = new Set(['play', 'pause', 'next', 'previous', 'seek', 'shuffle', 'repeat', 'volume', 'transfer', 'like', 'playContext', 'playTrack', 'queue', 'dj'])
 const URI = /^spotify(:[A-Za-z0-9._-]{1,64}){2,4}$/
 const ID = /^[A-Za-z0-9]{1,64}$/
 
@@ -273,4 +277,24 @@ export function clock(ms: number): string {
   const minutes = Math.floor(total / 60)
   const seconds = total % 60
   return `${minutes}:${seconds.toString().padStart(2, '0')}`
+}
+
+
+export const DJ_URI = 'spotify:playlist:37i9dQZF1EYkqdzj48dyYq'
+const DAYLIST = /^spotify:playlist:37i9dQZF1EP[A-Za-z0-9]+$/
+
+export function daylistUri(recent: unknown): string | null {
+  for (const item of arr(obj(recent)?.items)) {
+    const uri = str(obj(obj(item)?.context)?.uri)
+    if (uri && DAYLIST.test(uri)) return uri
+  }
+  return null
+}
+
+export function savedAlbumRows(body: unknown): Row[] {
+  return rows(obj(body)?.items, (item) => albumRow(obj(item)?.album))
+}
+
+export function followedArtistRows(body: unknown): Row[] {
+  return rows(obj(obj(body)?.artists)?.items, artistRow)
 }

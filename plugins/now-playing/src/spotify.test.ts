@@ -1,5 +1,5 @@
 import { assert, test } from 'orca/testing'
-import { apiErrorMessage, authorizeUrl, clock, commandCall, parseCommand, parseDevices, parsePlayer, pickImage, playlistRow, searchRows, trackRow } from './spotify'
+import { apiErrorMessage, authorizeUrl, clock, commandCall, daylistUri, followedArtistRows, parseCommand, savedAlbumRows, parseDevices, parsePlayer, pickImage, playlistRow, searchRows, trackRow } from './spotify'
 
 const track = {
   type: 'track',
@@ -129,4 +129,31 @@ test('clock formats minutes and seconds', () => {
   assert.equal(clock(336000), '5:36')
   assert.equal(clock(5000), '0:05')
   assert.equal(clock(-1), '0:00')
+})
+
+test('daylist comes from recently played, and only a daylist link counts', () => {
+  const recent = {
+    items: [
+      { context: { uri: 'spotify:playlist:0Eo8s1yDO8KsxExZZRSOBx' } },
+      { context: { uri: 'spotify:playlist:37i9dQZF1EYkqdzj48dyYq' } },
+      { context: null },
+      { context: { uri: 'spotify:playlist:37i9dQZF1EP6YuccBxUcC1' } }
+    ]
+  }
+  assert.equal(daylistUri(recent), 'spotify:playlist:37i9dQZF1EP6YuccBxUcC1')
+  assert.equal(daylistUri({ items: [{ context: { uri: 'spotify:playlist:37i9dQZF1EYkqdzj48dyYq' } }] }), null)
+  assert.equal(daylistUri(null), null)
+})
+
+test('saved albums and followed artists map to rows', () => {
+  const albums = savedAlbumRows({ items: [{ album: { id: 'al1', uri: 'spotify:album:al1', name: 'Yankee Hotel Foxtrot', artists: [{ name: 'Wilco' }], images: [] } }, { album: null }] })
+  assert.deepEqual(albums.map((row) => [row.kind, row.name, row.sub]), [['album', 'Yankee Hotel Foxtrot', 'Wilco']])
+  const artists = followedArtistRows({ artists: { items: [{ id: 'ar1', uri: 'spotify:artist:ar1', name: 'Nickel Creek', images: [] }] } })
+  assert.deepEqual(artists.map((row) => [row.kind, row.name]), [['artist', 'Nickel Creek']])
+  assert.deepEqual(followedArtistRows(null), [])
+})
+
+test('the dj command parses and has no web API call', () => {
+  assert.deepEqual(parseCommand({ action: 'dj' }), { action: 'dj' })
+  assert.equal(commandCall({ action: 'dj' }, null), null)
 })

@@ -12,5 +12,11 @@ declare module 'node:http' {
   export function createServer(handler: (req: IncomingMessage, res: ServerResponse) => void): Server
 }
 
+declare module 'node:child_process' {
+  export function execFile(file: string, args: readonly string[], options: { timeout?: number }, callback: (error: Error | null, stdout: string, stderr: string) => void): unknown
+}
+
+declare const process: { readonly platform: string }
+
 declare function setTimeout(run: () => void, ms: number): unknown
 declare function clearTimeout(handle: unknown): void
