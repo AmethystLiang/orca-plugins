@@ -46,18 +46,16 @@ export function createLinux(d: Deps, root = '', home = os.homedir()): Provider {
     return states.length > 0 && states.every((s) => s.trim() === 'suspended')
   }
 
-  async function nvidiaPower(): Promise<string[]> {
-    const devices = await d.list(root + '/sys/bus/pci/devices')
-    // Check topology every poll, but reuse identities while the device set is stable.
-    if (nvidiaPaths && Date.now() - nvidiaPathsAt < NVIDIA_DISCOVERY_EVERY &&
-      devices.length === nvidiaDevices.size && devices.every((dev) => nvidiaDevices.has(dev))) return nvidiaPaths
+  async function discoverNvidiaPower(devices: string[]): Promise<string[]> {
     nvidiaPaths = null
     const vendors = await Promise.all(devices.map((dev) => d.read(root + '/sys/bus/pci/devices/' + dev + '/vendor')))
-    const classes = await Promise.all(devices.map((dev) => d.read(root + '/sys/bus/pci/devices/' + dev + '/class')))
     // An incomplete scan cannot establish that every NVIDIA GPU is asleep.
-    if (vendors.some((v) => !v.trim()) || classes.some((c) => !c.trim())) return []
-    const paths = devices
-      .filter((_, i) => vendors[i].trim() === '0x10de' && classes[i].trim().startsWith('0x03'))
+    if (vendors.some((v) => !v.trim())) return []
+    const nvidia = devices.filter((_, i) => vendors[i].trim() === '0x10de')
+    const classes = await Promise.all(nvidia.map((dev) => d.read(root + '/sys/bus/pci/devices/' + dev + '/class')))
+    if (classes.some((c) => !c.trim())) return []
+    const paths = nvidia
+      .filter((_, i) => classes[i].trim().startsWith('0x03'))
       .map((dev) => root + '/sys/bus/pci/devices/' + dev + '/power/runtime_status')
     if (paths.length) {
       nvidiaPaths = paths
@@ -65,6 +63,14 @@ export function createLinux(d: Deps, root = '', home = os.homedir()): Provider {
       nvidiaPathsAt = Date.now()
     }
     return paths
+  }
+
+  async function nvidiaPower() {
+    const devices = await d.list(root + '/sys/bus/pci/devices')
+    // Check topology every poll, but reuse identities while the device set is stable.
+    if (nvidiaPaths && Date.now() - nvidiaPathsAt < NVIDIA_DISCOVERY_EVERY &&
+      devices.length === nvidiaDevices.size && devices.every((dev) => nvidiaDevices.has(dev))) return { paths: nvidiaPaths, devices, cached: true }
+    return { paths: await discoverNvidiaPower(devices), devices, cached: false }
   }
 
   async function readGpu() {
@@ -81,11 +87,14 @@ export function createLinux(d: Deps, root = '', home = os.homedir()): Provider {
       gpuMode = amdCards.length ? 'amd' : 'none'
     }
     if (gpuMode === 'nvidia') {
-      let sleeping = await asleep(await nvidiaPower())
-      if (sleeping === null) {
-        // A removed device should not wake the remaining suspended GPUs.
+      const power = await nvidiaPower()
+      let sleeping = await asleep(power.paths)
+      if (sleeping === null || (sleeping && power.cached)) {
+        // A BDF can be reused by a different PCI function without changing topology.
+        // Revalidate every identity before cached paths can establish that all GPUs sleep.
         nvidiaPaths = null
-        sleeping = await asleep(await nvidiaPower())
+        const paths = sleeping ? await discoverNvidiaPower(power.devices) : (await nvidiaPower()).paths
+        sleeping = await asleep(paths)
         if (sleeping === null) nvidiaPaths = null
       }
       if (sleeping) return { utilization: 0, model: 'NVIDIA GPU (asleep)' }

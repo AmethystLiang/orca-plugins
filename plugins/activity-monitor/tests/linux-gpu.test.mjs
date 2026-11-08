@@ -55,7 +55,7 @@ function gpuFixture(t) {
   }
 }
 
-test('NVIDIA polling reuses PCI metadata and reads fresh power state on every refresh', async (t) => {
+test('NVIDIA active polling reuses PCI metadata and verifies identities before declaring sleep', async (t) => {
   const h = gpuFixture(t)
   for (let i = 0; i < 64; i++) h.device('0000:' + i.toString(16).padStart(2, '0') + ':01.0', '0x8086', '0x020000')
   const gpu = h.device('0001:01:00.0')
@@ -72,8 +72,9 @@ test('NVIDIA polling reuses PCI metadata and reads fresh power state on every re
   assert.deepEqual(await h.sample(), { utilization: 72, model: 'NVIDIA Test GPU' })
   assert.equal(h.queries, 3)
   assert.equal(h.pciLists(), 3)
-  assert.equal(h.metadataReads(), 67 * 2)
-  assert.deepEqual(h.reads.filter((path) => path.endsWith('/power/runtime_status')), Array(3).fill(gpu + '/power/runtime_status'))
+  // Each identity scan reads every vendor, but classes only for NVIDIA functions.
+  assert.equal(h.metadataReads(), (67 + 2) * 2)
+  assert.deepEqual(h.reads.filter((path) => path.endsWith('/power/runtime_status')), Array(4).fill(gpu + '/power/runtime_status'))
 })
 
 test('an added active NVIDIA GPU is found on the next poll while the existing GPU is asleep', async (t) => {
@@ -90,7 +91,44 @@ test('an added active NVIDIA GPU is found on the next poll while the existing GP
   h.files.set(added + '/power/runtime_status', 'suspended\n')
   assert.equal((await h.sample()).model, 'NVIDIA GPU (asleep)')
   assert.equal(h.pciLists(), 3)
-  assert.equal(h.metadataReads(), 6)
+  assert.equal(h.metadataReads(), 10)
+  assert.equal(h.queries, 2)
+})
+
+for (const [vendor, klass] of [['0x8086', '0x030000'], ['0x10de', '0x040300']]) {
+  test(`an active NVIDIA replacement at the same BDF is found after ${vendor}/${klass} was cached`, async (t) => {
+    const h = gpuFixture(t)
+    h.device('0000:01:00.0', '0x10de', '0x030200', 'suspended')
+    h.device('0000:02:00.0', vendor, klass, 'suspended')
+    await h.sample(0)
+    assert.equal((await h.sample()).model, 'NVIDIA GPU (asleep)')
+    h.device('0000:02:00.0', '0x10de', '0x030200', 'active')
+    h.utilization = 61
+    assert.deepEqual(await h.sample(), { utilization: 61, model: 'NVIDIA Test GPU' })
+    assert.equal(h.queries, 2)
+  })
+}
+
+test('a cached NVIDIA function replaced by another vendor at the same BDF cannot establish sleep', async (t) => {
+  const h = gpuFixture(t)
+  h.device('0000:01:00.0', '0x10de', '0x030200', 'suspended')
+  await h.sample(0)
+  assert.equal((await h.sample()).model, 'NVIDIA GPU (asleep)')
+  h.device('0000:01:00.0', '0x8086', '0x030000', 'suspended')
+  assert.equal((await h.sample()).model, 'NVIDIA Test GPU')
+  assert.equal(h.queries, 2)
+})
+
+test('missing metadata on a cached NVIDIA function prevents sleep and is retried next poll', async (t) => {
+  const h = gpuFixture(t)
+  const gpu = h.device('0000:01:00.0', '0x10de', '0x030200', 'suspended')
+  await h.sample(0)
+  await h.sample()
+  h.files.delete(gpu + '/vendor')
+  assert.equal((await h.sample()).model, 'NVIDIA Test GPU')
+  assert.equal(h.queries, 2)
+  h.files.set(gpu + '/vendor', '0x10de\n')
+  assert.equal((await h.sample()).model, 'NVIDIA GPU (asleep)')
   assert.equal(h.queries, 2)
 })
 
@@ -105,10 +143,10 @@ test('a replaced NVIDIA device is discovered in the same poll even with the same
   assert.equal(h.queries, 1)
   assert.equal((await h.sample()).model, 'NVIDIA GPU (asleep)')
   assert.equal(h.pciLists(), 3)
-  assert.equal(h.metadataReads(), 4)
+  assert.equal(h.metadataReads(), 6)
   assert.equal(h.queries, 1)
   assert.equal(h.reads.filter((path) => path === removed + '/power/runtime_status').length, 1)
-  assert.equal(h.reads.filter((path) => path === added + '/power/runtime_status').length, 2)
+  assert.equal(h.reads.filter((path) => path === added + '/power/runtime_status').length, 3)
 })
 
 test('removing one of two NVIDIA GPUs does not wake the remaining suspended GPU', async (t) => {
@@ -126,7 +164,7 @@ test('removing one of two NVIDIA GPUs does not wake the remaining suspended GPU'
   await h.sample()
   assert.equal(h.queries, 1)
   assert.equal(h.pciLists(), 3)
-  assert.equal(h.metadataReads(), 6)
+  assert.equal(h.metadataReads(), 8)
 })
 
 test('NVIDIA falls back after one incomplete status recheck and recovers on the next poll', async (t) => {
@@ -173,31 +211,31 @@ test('incomplete PCI metadata cannot report all GPUs asleep and is retried on th
   assert.equal(h.queries, 2)
   await h.sample()
   assert.equal(h.pciLists(), 3)
-  assert.equal(h.metadataReads(), 8)
+  assert.equal(h.metadataReads(), 12)
 })
 
-test('PCI directory order changes do not invalidate NVIDIA identity metadata', async (t) => {
+test('PCI directory order changes do not invalidate cached active NVIDIA identities', async (t) => {
   const h = gpuFixture(t)
-  h.device('0000:01:00.0', '0x10de', '0x030200', 'suspended')
+  h.device('0000:01:00.0')
   h.device('0000:02:00.0', '0x8086', '0x020000')
   await h.sample(0)
   await h.sample()
   h.reverseDevices = true
-  assert.equal((await h.sample()).model, 'NVIDIA GPU (asleep)')
+  assert.equal((await h.sample()).model, 'NVIDIA Test GPU')
   assert.equal(h.pciLists(), 2)
-  assert.equal(h.metadataReads(), 4)
-  assert.equal(h.queries, 1)
+  assert.equal(h.metadataReads(), 3)
+  assert.equal(h.queries, 3)
 })
 
-test('stable NVIDIA PCI identities are refreshed after a minute', async (t) => {
+test('cached active NVIDIA PCI identities are refreshed after a minute', async (t) => {
   const h = gpuFixture(t)
-  h.device('0000:01:00.0', '0x10de', '0x030200', 'suspended')
+  h.device('0000:01:00.0')
   await h.sample(0)
   await h.sample()
   await h.sample(57_000)
   assert.equal(h.metadataReads(), 2)
-  assert.equal((await h.sample()).model, 'NVIDIA GPU (asleep)')
+  assert.equal((await h.sample()).model, 'NVIDIA Test GPU')
   assert.equal(h.pciLists(), 3)
   assert.equal(h.metadataReads(), 4)
-  assert.equal(h.queries, 1)
+  assert.equal(h.queries, 4)
 })
