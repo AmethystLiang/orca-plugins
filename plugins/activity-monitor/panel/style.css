@@ -304,3 +304,11 @@ body {
   .hq .n { display: none; }
   .hq:has(.n) { max-width: none; }
 }
+.hq.short { max-width: none; }
+.hq.short .n, .hs.tight .pips { display: none; }
+.top.slim .cu { width: 20px; height: 20px; padding: 0; gap: 0; border-color: transparent; border-radius: 4px; justify-content: center; }
+.top.slim .cu.review, .top.slim .cu.done, .light .top.slim .cu.review, .light .top.slim .cu.done { color: var(--muted); border-color: transparent; }
+.top.slim .cu:hover { color: var(--fg); }
+.top.slim .cu .t, .top.slim .cu .wide { display: none; }
+.top.slim .cu .slim, .top.slim .cu .dot { display: block; }
+.top.slim .stp b { min-width: 40px; }

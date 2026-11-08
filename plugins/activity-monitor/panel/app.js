@@ -785,6 +785,17 @@
     })
   }
 
+  function fitFooter() {
+    var top = root.querySelector('.top')
+    var hs = top && top.querySelector('.hs')
+    if (!hs) return
+    var hq = hs.querySelector('.hq')
+    function over(el) { return !!el && el.scrollWidth > el.clientWidth }
+    if (over(hq)) hq.classList.add('short')
+    if (over(hs) || over(hq)) hs.classList.add('tight')
+    if (over(hs) || over(hq)) top.classList.add('slim')
+  }
+
   function stepper() {
     var fast = prefs.rate < RATE_FAST
     return '<div class="stp push' + (fast ? ' fast' : '') + '" title="Refresh every ' + prefs.rate + 'ms' + (fast ? '. Fast refresh uses more CPU.' : '') + '">' +
@@ -956,6 +967,7 @@
     var menu = view.settings || !data.sample ? '' : view.heroMenu ? heroMenuView() : view.colMenu ? colMenuView() : menuView()
     root.innerHTML = tabs + '<div class="pbody' + (layout.page ? ' page' : '') + (layout.all ? ' allp' : '') + '">' + body + '</div>' + top + menu
     placeMenu()
+    fitFooter()
     root.querySelector('.pbody').scrollTop = scrollTop
     var newList = root.querySelector('.pscroll')
     if (newList) newList.scrollTop = listTop
