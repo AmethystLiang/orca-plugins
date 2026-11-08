@@ -1,4 +1,4 @@
-import type { Command, Device, NowPlaying, RepeatMode, Row } from './protocol'
+import type { AlbumRef, Command, Device, NowPlaying, RepeatMode, Row } from './protocol'
 
 export const PLAYER_COVER_PX = 400
 export const REDIRECT_PORT = 8888
@@ -79,6 +79,11 @@ export function parsePlayer(value: unknown): NowPlaying | null {
   const isEpisode = item.type === 'episode'
   const album = obj(item.album)
   const show = obj(item.show)
+  const albumUri = str(album?.uri)
+  const albumRef: AlbumRef | null =
+    !isEpisode && albumUri
+      ? { uri: albumUri, id: str(album?.id), name: str(album?.name) ?? '', year: releaseYear(album?.release_date), total: num(album?.total_tracks), number: num(item.track_number), openUrl: null }
+      : null
   return {
     trackId: isEpisode ? null : str(item.id),
     uri: str(item.uri),
@@ -93,8 +98,22 @@ export function parsePlayer(value: unknown): NowPlaying | null {
     repeat: REPEAT[str(player.repeat_state) ?? 'off'] ?? 'off',
     liked: null,
     device: parseDevice(player.device),
-    contextUri: str(obj(player.context)?.uri)
+    contextUri: str(obj(player.context)?.uri),
+    albumRef
   }
+}
+
+export function releaseYear(value: unknown): number | null {
+  const match = /^(\d{4})/.exec(str(value) ?? '')
+  return match ? Number(match[1]) : null
+}
+
+export function albumRefOf(value: unknown): AlbumRef | null {
+  const track = obj(value)
+  const album = obj(track?.album)
+  const uri = str(album?.uri)
+  if (!track || !album || !uri) return null
+  return { uri, id: str(album.id), name: str(album.name) ?? '', year: releaseYear(album.release_date), total: num(album.total_tracks), number: num(track.track_number), openUrl: null }
 }
 
 export function trackRow(value: unknown): Row | null {
@@ -109,7 +128,9 @@ export function trackRow(value: unknown): Row | null {
     uri,
     name: str(track.name) ?? 'Unknown',
     sub: isEpisode ? (str(obj(track.show)?.name) ?? 'Episode') : names(track.artists),
-    cover: pickImage(isEpisode ? track.images : obj(track.album)?.images)
+    cover: pickImage(isEpisode ? track.images : obj(track.album)?.images),
+    number: num(track.track_number),
+    durationMs: num(track.duration_ms)
   }
 }
 
@@ -126,7 +147,7 @@ export function albumRow(value: unknown): Row | null {
   const id = str(album?.id)
   const uri = str(album?.uri)
   if (!album || !id || !uri) return null
-  return { kind: 'album', id, uri, name: str(album.name) ?? 'Unknown', sub: names(album.artists) || 'Album', cover: pickImage(album.images) }
+  return { kind: 'album', id, uri, name: str(album.name) ?? 'Unknown', sub: names(album.artists) || 'Album', cover: pickImage(album.images), year: releaseYear(album.release_date), count: num(album.total_tracks) }
 }
 
 export function playlistRow(value: unknown): Row | null {
@@ -250,7 +271,8 @@ export function parseCommand(input: unknown): Command | null {
       const contextUri = uri('contextUri')
       if (!contextUri) return null
       const offsetUri = uri('offsetUri')
-      return offsetUri ? { action, contextUri, offsetUri } : { action, contextUri }
+      const command: Command = offsetUri ? { action, contextUri, offsetUri } : { action, contextUri }
+      return value.shuffle === true ? { ...command, shuffle: true } : command
     }
     case 'playTrack':
     case 'queue': {
@@ -294,7 +316,16 @@ export function daylistUri(recent: unknown): string | null {
 }
 
 export function savedAlbumRows(body: unknown): Row[] {
-  return rows(obj(body)?.items, (item) => albumRow(obj(item)?.album))
+  return rows(obj(body)?.items, (item) => {
+    const row = albumRow(obj(item)?.album)
+    if (!row) return null
+    const added = Date.parse(str(obj(item)?.added_at) ?? '')
+    return Number.isFinite(added) ? { ...row, addedAt: added } : row
+  }).sort((a, b) => (b.addedAt ?? 0) - (a.addedAt ?? 0))
+}
+
+export function likedFlags(value: unknown): boolean[] {
+  return arr(value).map((flag) => flag === true)
 }
 
 export function followedArtistRows(body: unknown): Row[] {

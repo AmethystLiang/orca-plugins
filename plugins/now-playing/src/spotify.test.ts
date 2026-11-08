@@ -1,5 +1,5 @@
 import { assert, test } from 'orca/testing'
-import { apiErrorMessage, authorizeUrl, clock, commandCall, daylistUri, followedArtistRows, parseCommand, savedAlbumRows, parseDevices, parsePlayer, pickImage, playlistRow, searchRows, trackRow } from './spotify'
+import { albumRefOf, apiErrorMessage, authorizeUrl, clock, commandCall, daylistUri, followedArtistRows, likedFlags, parseCommand, savedAlbumRows, parseDevices, parsePlayer, pickImage, playlistRow, searchRows, trackRow } from './spotify'
 
 const track = {
   type: 'track',
@@ -35,8 +35,13 @@ test('the player answer maps to now playing', () => {
     repeat: 'track',
     liked: null,
     device: { id: 'd1', name: "My Laptop", type: 'Computer', active: true, volume: 64 },
-    contextUri: 'spotify:playlist:p1'
+    contextUri: 'spotify:playlist:p1',
+    albumRef: null
   })
+  const placed = parsePlayer({ is_playing: true, item: { ...track, track_number: 4, album: { ...track.album, id: 'al9', uri: 'spotify:album:al9', release_date: '2011-06-17', total_tracks: 10 } } })
+  assert.deepEqual(placed?.albumRef, { uri: 'spotify:album:al9', id: 'al9', name: 'Bon Iver, Bon Iver', year: 2011, total: 10, number: 4, openUrl: null })
+  assert.deepEqual(albumRefOf({ ...track, track_number: 2, album: { ...track.album, uri: 'spotify:album:al9', release_date: '2011' } }), { uri: 'spotify:album:al9', id: null, name: 'Bon Iver, Bon Iver', year: 2011, total: null, number: 2, openUrl: null })
+  assert.equal(albumRefOf({ ...track, album: { name: 'no uri' } }), null)
 })
 
 test('nothing playing (204 body null, or no item) is null', () => {
@@ -73,6 +78,7 @@ test('playlist rows read the song count from tracks or items', () => {
 test('track rows unwrap playlist items and skip local files with no id', () => {
   assert.equal(trackRow({ track })?.name, 'Holocene')
   assert.equal(trackRow({ item: track })?.name, 'Holocene')
+  assert.deepEqual([trackRow({ ...track, track_number: 3 })?.number, trackRow(track)?.durationMs, trackRow(track)?.number], [3, 336000, null])
   assert.equal(trackRow({ track: { name: 'local file', id: null, uri: 'spotify:local:x' } }), null)
 })
 
@@ -148,8 +154,17 @@ test('daylist comes from recently played, and only a daylist link counts', () =>
 })
 
 test('saved albums and followed artists map to rows', () => {
-  const albums = savedAlbumRows({ items: [{ album: { id: 'al1', uri: 'spotify:album:al1', name: 'Yankee Hotel Foxtrot', artists: [{ name: 'Wilco' }], images: [] } }, { album: null }] })
-  assert.deepEqual(albums.map((row) => [row.kind, row.name, row.sub]), [['album', 'Yankee Hotel Foxtrot', 'Wilco']])
+  const albums = savedAlbumRows({
+    items: [
+      { added_at: '2024-01-02T00:00:00Z', album: { id: 'al1', uri: 'spotify:album:al1', name: 'Yankee Hotel Foxtrot', artists: [{ name: 'Wilco' }], images: [], release_date: '2002-04-23', total_tracks: 11 } },
+      { added_at: '2024-03-02T00:00:00Z', album: { id: 'al2', uri: 'spotify:album:al2', name: 'Sky Blue Sky', artists: [{ name: 'Wilco' }], images: [], release_date: '2007' } },
+      { album: null }
+    ]
+  })
+  assert.deepEqual(albums.map((row) => [row.kind, row.name, row.sub, row.year, row.count]), [['album', 'Sky Blue Sky', 'Wilco', 2007, null], ['album', 'Yankee Hotel Foxtrot', 'Wilco', 2002, 11]])
+  assert.equal(albums[0].addedAt, Date.parse('2024-03-02T00:00:00Z'))
+  assert.deepEqual(likedFlags([true, false, 'x']), [true, false, false])
+  assert.deepEqual(likedFlags(null), [])
   const artists = followedArtistRows({ artists: { items: [{ id: 'ar1', uri: 'spotify:artist:ar1', name: 'Nickel Creek', images: [] }] } })
   assert.deepEqual(artists.map((row) => [row.kind, row.name]), [['artist', 'Nickel Creek']])
   assert.deepEqual(followedArtistRows(null), [])

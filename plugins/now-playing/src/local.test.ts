@@ -19,6 +19,10 @@ test('the Mac app state parses into now playing', () => {
   assert.equal(state.now.repeat, 'off')
   assert.equal(state.now.cover, 'https://i.scdn.co/image/ab67616d0000b27317ae')
   assert.equal(state.volume, 64)
+  assert.deepEqual(state.now.albumRef, { uri: null, id: null, name: 'The Flying Burrito Brothers', year: null, total: null, number: null, openUrl: null })
+  const numbered = parseLocal(line('playing').replace('\n', S + '7\n'))
+  assert.ok(numbered && numbered.status === 'playing')
+  assert.equal(numbered.now.albumRef?.number, 7)
 })
 
 test('a comma decimal position (non-English macOS) still parses', () => {
@@ -60,12 +64,17 @@ test('playing through the Mac app keeps focus and plays inside the context', () 
   const args = localPlay('spotify:track:t1', 'spotify:playlist:p1')
   assert.ok(args.includes('tell application "Spotify" to play track "spotify:track:t1" in context "spotify:playlist:p1"'))
   assert.equal(args.filter((arg) => arg === 'tell application prior to activate').length, 2)
+  assert.ok(!args.includes('tell application "Spotify" to set shuffling to true'))
+  const shuffled = localPlay('spotify:album:a1', undefined, true)
+  assert.equal(shuffled.indexOf('tell application "Spotify" to set shuffling to true') < shuffled.indexOf('tell application "Spotify" to play track "spotify:album:a1"'), true)
 })
 
 test('openApp and music URIs are checked, and quotes never pass', () => {
   assert.deepEqual(parseCommand({ action: 'openApp' }), { action: 'openApp' })
   assert.deepEqual(localCommand({ action: 'openApp' }), ['-e', 'tell application "Spotify" to activate'])
   assert.deepEqual(parseCommand({ action: 'playContext', contextUri: 'music:album:0123456789ABCDEF' }), { action: 'playContext', contextUri: 'music:album:0123456789ABCDEF' })
+  assert.deepEqual(parseCommand({ action: 'playContext', contextUri: 'music:album:0123456789ABCDEF', shuffle: true }), { action: 'playContext', contextUri: 'music:album:0123456789ABCDEF', shuffle: true })
+  assert.deepEqual(parseCommand({ action: 'playContext', contextUri: 'music:album:0123456789ABCDEF', shuffle: 'yes' }), { action: 'playContext', contextUri: 'music:album:0123456789ABCDEF' })
   assert.equal(parseCommand({ action: 'playContext', contextUri: 'music:shell:0123456789ABCDEF' }), null)
   assert.equal(parseCommand({ action: 'playTrack', uri: 'music:track:A" & quit & "' }), null)
   assert.equal(parseCommand({ action: 'playTrack', uri: 'spotify:track:a" & quit & "' }), null)

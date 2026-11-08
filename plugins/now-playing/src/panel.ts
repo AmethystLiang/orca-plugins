@@ -25,7 +25,9 @@ const ICONS: Record<string, string> = {
   check: '<polyline points="20 6 9 17 4 12"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   open: '<path d="M7 17 17 7"/><path d="M8 7h9v9"/>',
-  close: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'
+  close: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+  right: '<polyline points="9 6 15 12 9 18"/>',
+  shrink: '<polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/>'
 }
 
 const ICON_CSS = Object.entries(ICONS)
@@ -36,10 +38,14 @@ const ICON_CSS = Object.entries(ICONS)
   })
   .join('\n')
 
-type Tab = 'library' | 'queue'
+type Tab = 'library' | 'albums' | 'queue'
+type CoverSize = 'big' | 'small'
 const POLL_MS = 2000
 const RETRY_MS = 20_000
 const TAB_KEY = 'tab'
+const COVER_KEY = 'cover'
+const GRID_ROWS = 6
+const STRIP_BARS_MAX = 24
 
 type Frame = {
   plugin: { request(name: string, input?: unknown): Promise<unknown>; on(event: string, handler: (payload: unknown) => void): { dispose(): void } }
@@ -147,6 +153,7 @@ document.body.appendChild(app)
 let view: PlayerView | null = null
 let viewAt = 0
 let tab: Tab = 'library'
+let coverSize: CoverSize = 'big'
 let library: LibraryView | null = null
 const expanded = new Set<string>()
 let opened: { row: Row; list: ListView | null } | null = null
@@ -562,10 +569,8 @@ function ensureShell(): void {
   delete app.dataset.choose
   if (fresh) resetLists()
   if (!hasQueue()) tab = 'library'
-  const paused = ok?.app === 'spotify' && ok.pausedMs > 0
-  const label = ok?.app === 'music' ? 'Search your library' : paused ? 'Search your saved library' : 'Search Spotify'
-  searchInput.placeholder = label
-  searchInput.setAttribute('aria-label', label)
+  if (tab === 'albums' && !hasQueue()) tab = 'library'
+  syncSearchLabel()
   app.replaceChildren(playerBox, tabsBox, listBox, footBox)
   if (!hasQueue()) tabsBox.replaceWith(searchBox)
   else renderTabs()
@@ -576,22 +581,94 @@ function ensureShell(): void {
   renderFoot()
 }
 
+function syncSearchLabel(): void {
+  const ok = okView()
+  const paused = ok?.app === 'spotify' && ok.pausedMs > 0
+  const label = tab === 'albums' ? 'Search albums' : ok?.app === 'music' ? 'Search your library' : paused ? 'Search your saved library' : 'Search Spotify'
+  searchInput.placeholder = label
+  searchInput.setAttribute('aria-label', label)
+}
+
+function setCoverSize(size: CoverSize): void {
+  coverSize = size
+  void orca.storage.set(COVER_KEY, size).catch(() => undefined)
+  renderPlayer()
+}
+
+function albumRowOf(playing: NowPlaying): Row | null {
+  const ref = playing.albumRef
+  if (!ref?.uri) return null
+  return { kind: 'album', id: ref.id ?? '', uri: ref.uri, name: ref.name || playing.album, sub: playing.artists, cover: playing.cover, year: ref.year, count: ref.total }
+}
+
+function renderStrip(playing: NowPlaying): HTMLElement | null {
+  const ref = playing.albumRef
+  if (!ref || (!ref.uri && !ref.openUrl)) return null
+  const strip = el('button', 'ctx')
+  const art = lazyImage(playing.cover, 'art', el('span', 'art'))
+  strip.append(art, el('span', 'clip', ref.name || playing.album))
+  if (ref.uri && ref.number && ref.total) {
+    strip.appendChild(el('span', 'm', `· ${ref.number} of ${ref.total}`))
+    if (ref.total <= STRIP_BARS_MAX) {
+      const bars = el('span', 'prog')
+      for (let i = 1; i <= ref.total; i += 1) bars.appendChild(el('i', i <= ref.number ? 'd' : ''))
+      strip.appendChild(bars)
+    }
+  } else if (ref.year) strip.appendChild(el('span', 'm', `· ${ref.year}`))
+  if (ref.uri) {
+    strip.title = `Open ${ref.name || 'this album'}`
+    strip.appendChild(icon('right'))
+    strip.addEventListener('click', (event) => {
+      event.stopPropagation()
+      const row = albumRowOf(playing)
+      if (row) openAlbum(row)
+    })
+  } else {
+    strip.title = 'Open in Music'
+    const pill = el('span', 'pillsm', 'Open in Music')
+    strip.appendChild(pill)
+    strip.addEventListener('click', (event) => {
+      event.stopPropagation()
+      if (ref.openUrl) void openUrl(ref.openUrl)
+    })
+  }
+  return strip
+}
+
 function renderPlayer(): void {
   const playing = now()
   const devices = view?.status === 'ok' ? view.devices : []
   playerBox.replaceChildren()
   app.dataset.app = currentApp()
+  playerBox.dataset.size = coverSize
   const head = el('div', 'titlerow')
-  const placeholder = el('div', 'bigcover m')
-  placeholder.appendChild(icon('music'))
-  playerBox.appendChild(playing ? lazyImage(playing.cover, 'bigcover', placeholder) : placeholder)
   const meta = el('div', 'meta')
   if (playing) {
     meta.append(el('div', 'title clip', playing.name), el('div', 'm clip', playing.artists))
     if (playing.album) meta.appendChild(el('div', 'm sm clip', playing.album))
   } else {
-    const hint = currentApp() === 'music' ? 'Play something in the Music app, or pick a playlist below.' : devices.length > 0 ? 'Pick a playlist below.' : 'Open Spotify on your Mac or phone.'
+    const hint = currentApp() === 'music' ? 'Play something in the Music app, or pick an album below.' : devices.length > 0 ? 'Pick an album or playlist below.' : 'Open Spotify on your Mac or phone.'
     meta.append(el('div', 'b', 'Nothing playing'), el('div', 'm sm', hint))
+  }
+  if (coverSize === 'big') {
+    const placeholder = el('div', 'bigcover m')
+    placeholder.appendChild(icon('music'))
+    const wrap = el('div', 'coverwrap')
+    wrap.appendChild(playing ? lazyImage(playing.cover, 'bigcover', placeholder) : placeholder)
+    wrap.appendChild(iconButton('shrink', 'Smaller cover', () => setCoverSize('small'), 'corner'))
+    playerBox.appendChild(wrap)
+  } else {
+    const placeholder = el('div', 'cover m')
+    placeholder.appendChild(icon('music'))
+    const mini = el('button', 'minicover')
+    mini.title = 'Bigger cover'
+    mini.setAttribute('aria-label', 'Bigger cover')
+    mini.appendChild(playing ? lazyImage(playing.cover, 'cover', placeholder) : placeholder)
+    mini.addEventListener('click', (event) => {
+      event.stopPropagation()
+      setCoverSize('big')
+    })
+    head.appendChild(mini)
   }
   const active = playing?.device ?? devices.find((device) => device.active) ?? null
   const connected = isLive(view)
@@ -688,6 +765,8 @@ function renderPlayer(): void {
   )
   while (chipRow.firstChild) ctrls.appendChild(chipRow.firstChild)
   playerBox.appendChild(ctrls)
+  const strip = playing ? renderStrip(playing) : null
+  if (strip) playerBox.appendChild(strip)
   updateProgress()
   renderPop()
 }
@@ -756,27 +835,58 @@ function renderPop(): void {
   }
 }
 
+function switchTab(key: Tab): void {
+  if (tab === key && !opened && query.trim() === '') return
+  opened = null
+  if (query.trim() !== '') {
+    searchInput.value = ''
+    query = ''
+    search = null
+    searchSeq += 1
+    clearButton.hidden = true
+  }
+  tab = key
+  void orca.storage.set(TAB_KEY, key).catch(() => undefined)
+  syncSearchLabel()
+  renderTabs()
+  loadTab()
+  renderList()
+  listBox.scrollTop = 0
+}
+
+function openAlbum(row: Row): void {
+  const target: Tab = hasQueue() && query.trim() === '' ? 'albums' : tab === 'queue' ? 'library' : tab
+  if (tab !== target) {
+    tab = target
+    void orca.storage.set(TAB_KEY, target).catch(() => undefined)
+    syncSearchLabel()
+    if (hasQueue()) renderTabs()
+  }
+  opened = { row, list: null }
+  renderList()
+  listBox.scrollTop = 0
+  void request<ListView>('tracks.get', { kind: row.kind, id: row.id }).then((list) => {
+    if (opened?.row !== row) return
+    opened.list = list ?? { rows: [], message: 'Could not load the songs.' }
+    renderList()
+  })
+}
+
 function renderTabs(): void {
   tabsBox.replaceChildren()
   const labels: [Tab, string][] = [
     ['library', 'Library'],
+    ['albums', 'Albums'],
     ['queue', 'Queue']
   ]
   for (const [key, label] of labels) {
     const button = el('button', tab === key ? 'on' : '', label)
     button.setAttribute('role', 'tab')
     button.setAttribute('aria-selected', tab === key ? 'true' : 'false')
-    button.addEventListener('click', () => {
-      if (tab === key && key === 'library' && opened) opened = null
-      tab = key
-      void orca.storage.set(TAB_KEY, key).catch(() => undefined)
-      renderTabs()
-      loadTab()
-      renderList()
-    })
+    button.addEventListener('click', () => switchTab(key))
     tabsBox.appendChild(button)
   }
-  if (tab === 'library') {
+  if (tab !== 'queue') {
     if (!searchBox.isConnected) tabsBox.after(searchBox)
   } else searchBox.remove()
 }
@@ -817,25 +927,145 @@ function libraryRow(row: Row): HTMLElement {
   if (row.kind === 'dj') return rowItem(row, () => void send({ action: 'dj' }))
   const play = (): void => void send({ action: 'playContext', contextUri: row.uri })
   if (!OPENS.has(row.kind)) return rowItem(row, play)
-  return rowItem(row, play, {
-    onOpen: () => {
-      opened = { row, list: null }
+  return rowItem(row, play, { onOpen: () => openAlbum(row) })
+}
+
+const seen = new WeakMap<Element, Row>()
+const watcher =
+  typeof IntersectionObserver === 'function'
+    ? new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (!entry.isIntersecting) continue
+            const row = seen.get(entry.target)
+            watcher?.unobserve(entry.target)
+            if (row && entry.target.isConnected) entry.target.replaceWith(lazyImage(row.cover, 'tcover', el('span', 'tcover')))
+          }
+        },
+        { root: listBox, rootMargin: '200px 0px' }
+      )
+    : null
+
+function albumTile(row: Row): HTMLElement {
+  const tile = el('button', 'tile')
+  tile.title = `Open ${row.name}`
+  const box = el('span', 'tcover')
+  if (watcher && !(row.cover && imageCache.has(row.cover))) {
+    seen.set(box, row)
+    watcher.observe(box)
+    tile.appendChild(box)
+  } else tile.appendChild(lazyImage(row.cover, 'tcover', box))
+  tile.append(el('span', 'n clip', row.name), el('span', 'm clip s', row.sub))
+  tile.addEventListener('click', () => openAlbum(row))
+  return tile
+}
+
+function albumGrid(list: Row[]): HTMLElement {
+  const grid = el('div', 'grid')
+  for (const row of list) grid.appendChild(albumTile(row))
+  return grid
+}
+
+function albumsSection(all: Row[]): void {
+  if (all.length === 0) return
+  const head = el('div', 'sec')
+  head.append(el('span', '', 'Albums'), el('span', 'cnt', String(all.length)))
+  listBox.appendChild(head)
+  const open = expanded.has('albums') && !hasQueue()
+  listBox.appendChild(albumGrid(open ? all : all.slice(0, GRID_ROWS)))
+  if (all.length > GRID_ROWS) {
+    const more = el('button', 'link more', hasQueue() ? `Show all ${all.length} →` : open ? 'Show less' : `Show all ${all.length}`)
+    more.addEventListener('click', () => {
+      if (hasQueue()) return switchTab('albums')
+      if (open) expanded.delete('albums')
+      else expanded.add('albums')
       renderList()
-      listBox.scrollTop = 0
-      void request<ListView>('tracks.get', { kind: row.kind, id: row.id }).then((list) => {
-        if (opened?.row !== row) return
-        opened.list = list ?? { rows: [], message: 'Could not load the songs.' }
-        renderList()
-      })
-    }
+    })
+    listBox.appendChild(more)
+  }
+}
+
+function lengthText(ms: number): string {
+  const minutes = Math.round(ms / 60_000)
+  if (minutes < 60) return `${minutes} min`
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  return rest === 0 ? `${hours} hr` : `${hours} hr ${rest} min`
+}
+
+function backLabel(): string {
+  if (query.trim() !== '') return 'Search results'
+  return tab === 'albums' ? 'Albums' : 'Library'
+}
+
+function renderAlbumPage(current: { row: Row; list: ListView | null }): void {
+  const parent = current.row
+  const back = el('div', 'backrow')
+  const backButton = iconButton('back', `Back to ${backLabel().toLowerCase()}`, () => {
+    opened = null
+    renderList()
   })
+  back.append(backButton, el('span', 'm sm', backLabel()))
+  listBox.appendChild(back)
+  const head = el('div', 'alb')
+  head.appendChild(lazyImage(parent.cover, 'albcover', el('span', 'albcover')))
+  head.append(el('div', 'n clip', parent.name), el('div', 'm clip', parent.sub))
+  const songs = current.list?.rows ?? []
+  const total = songs.reduce((sum, row) => sum + (row.durationMs ?? 0), 0)
+  const count = songs.length > 0 ? songs.length : (parent.count ?? null)
+  const facts = [parent.year ? String(parent.year) : null, count ? `${count} ${count === 1 ? 'song' : 'songs'}` : null, total > 0 ? lengthText(total) : null].filter((part): part is string => part !== null)
+  if (facts.length > 0) head.appendChild(el('div', 'm sm', facts.join(' · ')))
+  const pills = el('div', 'pills')
+  const play = el('button', 'pill pri')
+  play.append(icon('play'), el('span', '', 'Play'))
+  play.addEventListener('click', () => void send({ action: 'playContext', contextUri: parent.uri }))
+  const shuffle = el('button', 'pill')
+  shuffle.append(icon('shuffle'), el('span', '', 'Shuffle'))
+  shuffle.addEventListener('click', () => void send({ action: 'playContext', contextUri: parent.uri, shuffle: true }))
+  pills.append(play, shuffle)
+  head.appendChild(pills)
+  listBox.appendChild(head)
+  if (!current.list) return void listBox.appendChild(note('Loading songs…'))
+  if (current.list.message) return void listBox.appendChild(note(current.list.message))
+  if (songs.length === 0) return void listBox.appendChild(note('Nothing here yet.'))
+  songs.forEach((song, index) => listBox.appendChild(albumTrackRow(song, index + 1, parent)))
+}
+
+function albumTrackRow(row: Row, position: number, parent: Row): HTMLElement {
+  const item = el('div', `item${now()?.uri === row.uri ? ' now' : ''}`)
+  item.setAttribute('role', 'button')
+  item.tabIndex = 0
+  const text = el('div', 't')
+  text.appendChild(el('span', 'clip', row.name))
+  if (row.sub && row.sub !== parent.sub) text.appendChild(el('span', 'm sm clip', row.sub))
+  item.append(el('span', 'num', String(row.number ?? position)), text)
+  if (hasQueue()) item.appendChild(iconButton('addq', 'Add to queue', () => void send({ action: 'queue', uri: row.uri }).then((ok) => ok && toast(`Added "${row.name}" to the queue.`)), 'act'))
+  if (row.liked !== null && row.liked !== undefined && isLive(view)) {
+    const liked = row.liked
+    const label = currentApp() === 'music' ? (liked ? 'Remove from Favourite Songs' : 'Add to Favourite Songs') : liked ? 'Remove from Liked Songs' : 'Save to Liked Songs'
+    item.appendChild(
+      iconButton(liked ? 'heartFull' : 'heart', label, () => {
+        row.liked = !liked
+        renderList()
+        void send({ action: 'like', trackId: row.id, on: !liked })
+      }, `fav${liked ? ' on' : ' off'}`)
+    )
+  }
+  if (row.durationMs) item.appendChild(el('span', 'dur', clock(row.durationMs)))
+  const play = (): void => void send({ action: 'playContext', contextUri: parent.uri, offsetUri: row.uri })
+  item.addEventListener('click', play)
+  item.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') play()
+  })
+  return item
 }
 
 function renderOpened(current: { row: Row; list: ListView | null }): void {
   const parent = current.row
+  if (parent.kind === 'album') return renderAlbumPage(current)
   const head = el('div', 'item')
   head.append(
-    iconButton('back', query.trim() === '' ? 'Back to your library' : 'Back to search results', () => {
+    iconButton('back', `Back to ${backLabel().toLowerCase()}`, () => {
       opened = null
       renderList()
     }),
@@ -848,11 +1078,23 @@ function renderOpened(current: { row: Row; list: ListView | null }): void {
   if (!current.list) return void listBox.appendChild(note('Loading songs…'))
   if (current.list.message) return void listBox.appendChild(note(current.list.message))
   if (current.list.rows.length === 0) return void listBox.appendChild(note('Nothing here yet.'))
-  for (const song of current.list.rows) {
-    const row = song.cover === null && parent.kind === 'album' ? { ...song, cover: parent.cover } : song
+  for (const row of current.list.rows) {
     const play = parent.kind === 'artist' ? (): void => void send({ action: 'playTrack', uri: row.uri }) : (): void => void send({ action: 'playContext', contextUri: parent.uri, offsetUri: row.uri })
-    listBox.appendChild(rowItem(row, play, { queue: true, current: now()?.uri === row.uri }))
+    listBox.appendChild(rowItem(row, play, { queue: hasQueue(), current: now()?.uri === row.uri }))
   }
+}
+
+function renderAlbumsTab(): void {
+  if (opened) return renderOpened(opened)
+  if (!library) return void listBox.appendChild(note('Loading your albums…'))
+  const q = query.trim().toLowerCase()
+  const all = q === '' ? library.albums : library.albums.filter((row) => row.name.toLowerCase().includes(q) || row.sub.toLowerCase().includes(q))
+  if (library.albums.length === 0) return void listBox.appendChild(note(library.message ?? 'Save an album in Spotify and it shows here.'))
+  if (all.length === 0) return void listBox.appendChild(note(`No albums match "${query.trim()}".`))
+  const head = el('div', 'sec')
+  head.append(el('span', '', `${all.length} ${all.length === 1 ? 'album' : 'albums'}`), el('span', 'cnt', q === '' ? 'newest first' : ''))
+  listBox.appendChild(head)
+  listBox.appendChild(albumGrid(all))
 }
 
 function renderList(): void {
@@ -880,11 +1122,13 @@ function renderList(): void {
     const sections: [string, string, Row[]][] = [
       ['made', 'Made for you', library.made],
       ['playlists', 'Playlists', library.playlists],
-      ['artists', 'Artists', library.artists],
-      ['albums', 'Albums', library.albums]
+      ['artists', 'Artists', library.artists]
     ]
     for (const [key, label, list] of sections) {
-      if (key === 'playlists') recentSection()
+      if (key === 'playlists') {
+        albumsSection(library.albums)
+        recentSection()
+      }
       if (list.length === 0) continue
       listBox.appendChild(el('div', 'sec', label))
       const open = expanded.has(key) || list.length <= SHOW_ROWS + 1
@@ -902,6 +1146,7 @@ function renderList(): void {
     if (pausedMs() > 0) listBox.appendChild(apiLine)
     return
   }
+  if (tab === 'albums') return renderAlbumsTab()
   renderQueue()
 }
 
@@ -943,12 +1188,12 @@ function renderQueue(): void {
 }
 
 function loadTab(): void {
-  if (tab === 'library' && !library) {
+  if ((tab === 'library' || tab === 'albums') && !library) {
     libraryAt = Date.now()
     void request<LibraryView>('library.get').then((answer) => {
       library = answer ?? { made: [], playlists: [], artists: [], albums: [], needsReauth: false, message: 'Could not load your library.' }
       libraryAt = Date.now()
-      if (tab === 'library') renderList()
+      if (tab !== 'queue') renderList()
     })
   }
   if (tab === 'queue') {
@@ -974,7 +1219,7 @@ searchInput.addEventListener('input', () => {
   if (searchTimer) clearTimeout(searchTimer)
   search = null
   renderList()
-  if (query.trim() === '') return
+  if (query.trim() === '' || tab === 'albums') return
   searchTimer = setTimeout(() => {
     const seq = ++searchSeq
     void request<SearchView>('search', { q: query }).then((answer) => {
@@ -1057,11 +1302,9 @@ setInterval(() => {
 }, POLL_MS)
 setInterval(updateProgress, 500)
 
-void orca.storage
-  .get(TAB_KEY)
-  .catch(() => null)
-  .then((saved) => {
-    if (saved === 'library' || saved === 'queue') tab = saved
-    return refresh()
-  })
+void Promise.all([orca.storage.get(TAB_KEY).catch(() => null), orca.storage.get(COVER_KEY).catch(() => null)]).then(([savedTab, savedCover]) => {
+  if (savedTab === 'library' || savedTab === 'albums' || savedTab === 'queue') tab = savedTab
+  if (savedCover === 'small') coverSize = 'small'
+  return refresh()
+})
 
