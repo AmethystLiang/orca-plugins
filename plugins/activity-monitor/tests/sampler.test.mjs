@@ -109,3 +109,48 @@ test('a slow process list at lock-up risk does not hold up reads, and the culpri
   assert.ok(alerts.length > 0)
   assert.match(alerts[0].body, /is using/)
 })
+
+function quiet() {
+  return createSampler({ provider: stubProvider(), cpus: () => [{ user: 1, nice: 0, sys: 1, idle: 8, irq: 0 }], space: async () => null, settle: 0, selfPids: [] })
+}
+
+test('pulse with background recording off and no recent read leaves history empty', async () => {
+  const sampler = quiet()
+  sampler.setRecording(false)
+  await sampler.pulse()
+  const out = await sampler.read({ interval: 10000 })
+  assert.equal(out.sample.seq, 1)
+  assert.deepEqual(out.history, [])
+  assert.equal(out.windowed, false)
+})
+
+test('pulse with background recording on adds to history', async () => {
+  const sampler = quiet()
+  await sampler.pulse()
+  const out = await sampler.read({ interval: 10000 })
+  assert.deepEqual(out.history.map((p) => p.seq), [1])
+})
+
+test('pulse within 10s of a read still records while background recording is off', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: 1_700_000_000_000 })
+  const sampler = createSampler({ provider: stubProvider(), cpus: () => [{ user: 1, nice: 0, sys: 1, idle: 8, irq: 0 }], space: async () => null, settle: 0, selfPids: [], clock: () => Date.now() })
+  sampler.setRecording(false)
+  const first = await sampler.read({ interval: 1000 })
+  t.mock.timers.tick(5000)
+  await sampler.pulse()
+  t.mock.timers.tick(20000)
+  await sampler.pulse()
+  const out = await sampler.read({ interval: 10000, boot: first.boot, since: 0 })
+  assert.deepEqual(out.history.map((p) => p.seq), [1, 2])
+})
+
+test('read returns a windowed history only when the span outgrows the raw point count', async () => {
+  const sampler = quiet()
+  const short = await sampler.read({ interval: 1000, span: 900 })
+  assert.equal(short.windowed, false)
+  const long = await sampler.read({ interval: 1000, span: 3600 })
+  assert.equal(long.windowed, true)
+  assert.ok(long.history.length <= 600)
+  const fast = await sampler.read({ interval: 100, span: 300 })
+  assert.equal(fast.windowed, true)
+})
