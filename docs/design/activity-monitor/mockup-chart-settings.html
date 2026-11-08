@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Design options: chart settings</title>
+<style>
+:root {
+  --app-bg: #000;
+  --app-fg: #e6e6e6;
+  --app-muted: #a3a3a3;
+  --app-border: #1f1f1f;
+  --app-accent: #1a1a1a;
+  --app-track: #141414;
+  --app-danger: #f87171;
+  --app-ok: #6ee7a0;
+  --app-warn: #fbbf24;
+  --app-radius: 8px;
+  --app-font: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --app-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+
+  --doc-bg: #f1efe9;
+  --doc-fg: #2b2a27;
+  --doc-muted: #8a877f;
+  --doc-pick: #16a34a;
+  --doc-font: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --doc-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --doc-surface: #ffffff;
+  --doc-line: #0002;
+  --doc-shadow: #0001;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --doc-bg: #161513;
+    --doc-fg: #e9e6df;
+    --doc-muted: #8f8b82;
+    --doc-pick: #22c55e;
+    --doc-surface: #211f1c;
+    --doc-line: #fff2;
+    --doc-shadow: #0006;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; padding: 24px 24px 220px; background: var(--doc-bg); color: var(--doc-fg); font: 14px/1.4 var(--doc-font); }
+header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 20px; }
+header h1 { font-size: 20px; margin: 0; }
+.round { font: 600 11px var(--doc-mono); background: var(--doc-fg); color: var(--doc-bg); padding: 3px 8px; border-radius: 99px; }
+.ledger { margin: 0 0 24px; padding: 10px 14px; border-left: 3px solid var(--doc-pick); background: var(--doc-surface); font-size: 13px; }
+.ledger div::before { content: "\2713  "; color: var(--doc-pick); font-weight: 700; }
+.issue { margin: 0 0 40px; }
+.issue h2 { font-size: 16px; margin: 0 0 4px; }
+.issue h2 .num { font-family: var(--doc-mono); color: var(--doc-muted); margin-right: 6px; }
+.said { color: var(--doc-muted); font-size: 12px; margin: 0 0 10px; }
+.said::before { content: "you: "; font-weight: 600; }
+.view { font-size: 12px; margin: 6px 0 0; color: var(--doc-muted); }
+.view::before { content: "my view: "; font-weight: 600; }
+.row { display: flex; gap: 16px; overflow-x: auto; padding: 6px 4px 10px; }
+.col { flex: 0 0 auto; position: relative; border-radius: 12px; padding: 8px; outline: 2px solid transparent; transition: outline-color .12s; }
+.col[data-opt] { cursor: pointer; }
+.col[data-opt]:hover { outline-color: var(--doc-line); }
+.col.picked { outline: 3px solid var(--doc-pick); background: color-mix(in srgb, var(--doc-pick) 8%, transparent); }
+.tick { display: none; position: absolute; top: -8px; right: -8px; width: 24px; height: 24px; border-radius: 50%; background: var(--doc-pick); color: #fff; font: 700 14px/24px var(--doc-font); text-align: center; }
+.col.picked .tick { display: block; }
+.cap { margin-top: 8px; font-size: 13px; max-width: 360px; }
+.cap .pick { font: 700 12px var(--doc-mono); background: var(--doc-fg); color: var(--doc-bg); padding: 1px 6px; border-radius: 4px; margin-right: 6px; }
+.cap .cost { display: block; color: var(--doc-muted); font-size: 12px; }
+.now .cap .pick { background: var(--doc-muted); }
+.screen { background: var(--app-bg); color: var(--app-fg); font-family: var(--app-font); border: 1px solid var(--app-border); border-radius: var(--app-radius); overflow: hidden; box-shadow: 0 6px 24px var(--doc-shadow); }
+.phone { width: 393px; min-height: 600px; border-radius: 44px; border: 10px solid #111; }
+textarea.notes { display: block; width: 100%; max-width: 760px; min-height: 40px; margin-top: 6px; padding: 8px; font: 13px var(--doc-font); border: 1px solid var(--doc-line); border-radius: 6px; background: var(--doc-surface); color: var(--doc-fg); resize: vertical; }
+details.archive { margin: 40px 0; color: var(--doc-muted); }
+#manual { margin-top: 48px; padding: 16px; background: var(--doc-surface); border: 1px dashed var(--doc-line); border-radius: 10px; max-width: 760px; }
+#manual h3 { margin: 0 0 8px; font-size: 14px; }
+#manual textarea { width: 100%; min-height: 90px; font: 13px var(--doc-mono); padding: 8px; border: 1px solid var(--doc-line); border-radius: 6px; background: var(--doc-bg); color: var(--doc-fg); }
+#legend { font: 12px var(--doc-mono); color: var(--doc-muted); margin: 10px 0 0; white-space: pre-wrap; user-select: all; }
+#bar { position: fixed; left: 0; right: 0; bottom: 0; background: #1c1b19f2; color: #eee; padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; font-size: 12px; z-index: 10; }
+#bar .grp { display: flex; gap: 4px; align-items: center; }
+#bar .grp b { font-family: var(--doc-mono); color: #aaa; margin-right: 2px; }
+#bar button { font: 600 12px var(--doc-mono); border: 1px solid #555; background: #2a2926; color: #ddd; padding: 3px 8px; border-radius: 5px; cursor: pointer; }
+#bar button.on { background: var(--doc-pick); border-color: var(--doc-pick); color: #fff; }
+#bar .actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+#bar input#line { width: 260px; font: 12px var(--doc-mono); background: #000; color: #fff; border: 1px solid #555; border-radius: 5px; padding: 4px 6px; }
+#bar #copy { background: #fff; color: #111; border-color: #fff; }
+#count { font-family: var(--doc-mono); color: #aaa; }
+#toast { color: #8f8; min-width: 60px; }
+
+.stack { display: flex; flex-direction: column; gap: 10px; }
+.lbl { font: 11px var(--doc-mono); color: var(--doc-muted); margin: 0 0 3px 2px; }
+.ft { width: 446px; height: 36px; display: flex; align-items: center; gap: 6px; padding: 0 10px; font: 12px/1.35 var(--app-font); color: var(--app-fg); background: var(--app-bg); white-space: nowrap; position: relative; }
+.ft.narrow { width: 300px; }
+.hs { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; margin-right: 6px; overflow: hidden; }
+.row { flex-wrap: wrap; }
+.hword { font-weight: 600; color: var(--c); }
+.hchev { display: grid; place-items: center; color: var(--app-muted); margin-left: -4px; }
+.pips { display: flex; gap: 3px; flex: none; }
+.pips i { width: 14px; height: 6px; border-radius: 2px; background: var(--app-track); }
+.pips i.on { background: var(--c); }
+.narrow .crit .pips { display: none; }
+.hq { flex: none; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 5px; background: var(--app-danger); color: #fff; margin-left: auto; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stp { display: flex; align-items: center; height: 22px; border: 1px solid var(--app-border); border-radius: 6px; font: 11px var(--app-mono); flex: none; }
+.stp a { width: 20px; height: 100%; display: grid; place-items: center; color: var(--app-muted); }
+.stp b { min-width: 58px; text-align: center; font-weight: 500; }
+.narrow .stp b { min-width: 40px; }
+.ib { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 4px; color: var(--app-muted); flex: none; position: relative; cursor: pointer; }
+.ib:hover { background: var(--app-accent); color: var(--app-fg); }
+.ico { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.ft .chev { width: 12px; height: 12px; }
+.cu { min-width: 0; display: flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border: 1px solid var(--app-border); border-radius: 6px; color: var(--app-muted); font-size: 11px; font-weight: 500; flex: none; cursor: pointer; position: relative; }
+.cu:hover { background: var(--app-accent); color: var(--app-fg); }
+.cu.review { color: var(--app-warn); border-color: #fbbf2455; }
+.cu.done { color: var(--app-ok); }
+.tip { display: none; position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%); background: #111; color: var(--app-fg); border: 1px solid var(--app-border); border-radius: 6px; padding: 4px 8px; font-size: 11px; font-weight: 400; white-space: nowrap; z-index: 3; box-shadow: 0 4px 12px #0008; }
+.ib:hover .tip, .cu:hover .tip { display: block; }
+.dot { position: absolute; top: 1px; right: 1px; width: 6px; height: 6px; border-radius: 50%; background: var(--app-warn); box-shadow: 0 0 0 2px var(--app-bg); }
+.dot.ok { background: var(--app-ok); }
+.dot.pulse { animation: pulse 1.2s ease-in-out infinite; background: var(--app-muted); }
+@keyframes pulse { 50% { opacity: .2; } }
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.ring { width: 13px; height: 13px; border-radius: 50%; border: 2px solid var(--app-track); border-top-color: var(--app-fg); animation: spin .9s linear infinite; }
+.sep { width: 1px; height: 14px; background: var(--app-border); flex: none; }
+.body-sliver { width: 446px; height: 60px; background: var(--app-bg); border-bottom: 1px solid var(--app-border); padding: 8px 10px; font: 11px var(--app-font); color: var(--app-muted); }
+.screen.wrap { width: fit-content; }
+.narrow .cu .t, .narrow .hq .n { display: none; }
+.narrow .cu { padding: 0 3px; height: 20px; }
+.narrow .hs { gap: 5px; }
+.narrow .hq:has(.n) { max-width: none; }
+
+.ch { width: 426px; padding: 10px; background: var(--app-bg); font: 12px/1.35 var(--app-font); color: var(--app-fg); }
+.chh { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.chh b { font-size: 20px; font-weight: 600; }
+.chh span { color: var(--app-muted); font-size: 11px; }
+.cvw { position: relative; height: 110px; }
+.cvw canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.ctime { display: flex; justify-content: space-between; font: 9px var(--app-mono); color: var(--app-muted); margin-top: 3px; position: relative; height: 12px; }
+.ctime.abs span { position: absolute; transform: translateX(-50%); }
+.sv { width: 426px; padding: 10px; background: var(--app-bg); font: 12px/1.35 var(--app-font); color: var(--app-fg); display: flex; flex-direction: column; gap: 14px; }
+.sg { display: flex; flex-direction: column; }
+.sgh { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--app-muted); padding: 0 2px 4px; }
+.srows { border: 1px solid var(--app-border); border-radius: 8px; }
+.sr { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 34px; padding: 4px 8px 4px 10px; }
+.sr + .sr { border-top: 1px solid var(--app-border); }
+.sr > span { flex: 1; min-width: 4em; white-space: nowrap; }
+.sr > span em { display: block; font-style: normal; font-size: 10.5px; color: var(--app-muted); white-space: normal; }
+.nw { font-style: normal; font-size: 9px; color: var(--app-warn); margin-left: 6px; vertical-align: 1px; }
+.seg { display: flex; gap: 2px; padding: 2px; background: var(--app-track); border: 1px solid var(--app-border); border-radius: 7px; flex: none; margin-left: auto; }
+.seg a { display: flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 5px; color: var(--app-muted); font-size: 11px; white-space: nowrap; cursor: pointer; }
+.seg a.on { background: var(--app-accent); color: var(--app-fg); font-weight: 500; }
+.seg svg { width: 26px; height: 12px; display: block; }
+.tg { width: 28px; height: 16px; border-radius: 99px; background: var(--app-track); border: 1px solid var(--app-border); position: relative; flex: none; cursor: pointer; }
+.tg::after { content: ""; position: absolute; top: 1px; left: 1px; width: 12px; height: 12px; border-radius: 50%; background: var(--app-muted); }
+.tg.on { background: var(--app-fg); border-color: var(--app-fg); }
+.tg.on::after { left: 13px; background: var(--app-bg); }
+.stp2 { flex: none; display: flex; align-items: center; height: 22px; border: 1px solid var(--app-border); border-radius: 6px; font: 11px var(--app-mono); }
+.stp2 a { width: 20px; text-align: center; color: var(--app-muted); }
+.stp2 b { min-width: 58px; text-align: center; font-weight: 500; }
+</style>
+</head>
+<body data-key="design-options:am-charts:r2">
+
+<header>
+  <span class="round">ROUND 2</span>
+  <h1>Chart picks together, one collision</h1>
+</header>
+
+<div class="ledger">
+  <div>1C Bars are colored by value · 2A Line + fill stays the default</div>
+  <div>3B Clock mode shows round times that slide (14:20 · 14:25 · 14:30)</div>
+  <div>4C Gridlines on = 25/50/75% lines + labels; off = no lines, no value labels</div>
+  <div>5A One long Graphs group, plus a Cleanup group</div>
+</div>
+
+<section class="issue-comp" style="margin:0 0 40px">
+  <h2><span class="num">·</span>Everything applied</h2>
+  <div class="row">
+    <div class="col"><div class="stack">
+      <div class="lbl">Line + fill · Clock · grid on</div><div class="screen wrap"><div class="ch" data-chart='{"style":"fill","time":"round","span":"15m","grid":"full"}'></div></div>
+      <div class="lbl">Bars · Clock · grid on</div><div class="screen wrap"><div class="ch" data-chart='{"style":"heatbars","time":"round","span":"15m","grid":"full"}'></div></div>
+      <div class="lbl">Bars · 24h Clock · grid off</div><div class="screen wrap"><div class="ch" data-chart='{"style":"heatbars","time":"round","span":"24h","grid":false,"vlab":false}'></div></div>
+    </div></div>
+    <div class="col"><div class="screen wrap"><div class="sv" data-set-layout="a"></div></div></div>
+  </div>
+</section>
+
+<section class="issue" data-issue="1">
+  <h2><span class="num">1</span>Bars in Theme color?</h2>
+  <p class="said">1C colors by value, but Theme is one color</p>
+  <div class="row">
+    <div class="col"><div class="screen wrap"><div class="ch" data-chart='{"style":"themebars","time":"round","span":"15m","grid":"full"}'></div></div>
+      <div class="cap"><span class="pick">1A</span>One theme color<span class="cost">calm; Theme means one color everywhere</span></div></div>
+    <div class="col"><div class="screen wrap"><div class="ch" data-chart='{"style":"themeshade","time":"round","span":"15m","grid":"full"}'></div></div>
+      <div class="cap"><span class="pick">1B</span>Theme color, brighter when high<span class="cost">keeps "spikes pop"; still one hue</span></div></div>
+  </div>
+</section>
+
+<section class="issue" data-issue="2" data-keep="drawn">
+  <h2><span class="num">2</span>Ready to lock the charts?</h2>
+  <div class="row">
+    <div class="col"><div class="cap"><span class="pick">2A</span>Looks right<span class="cost">then I write the design doc</span></div></div>
+    <div class="col"><div class="cap"><span class="pick">2B</span>Close, with a fix<span class="cost">say what in the notes</span></div></div>
+  </div>
+</section>
+
+<details class="archive">
+  <summary>Earlier rounds</summary>
+  <div>Round 1: 1C bars colored by value, 2A line + fill default, 3B round clock times, 4C fuller grid / off removes labels, 5A one Graphs group.</div>
+</details>
+
+<script>
+(function () {
+  var PAL = ['#4ade80', '#fbbf24', '#f87171'];
+  var N = 90;
+  var seed = 7;
+  function rnd() { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
+  var data = [], v = 35;
+  for (var i = 0; i < N; i++) { v += (rnd() - 0.5) * 18; if (rnd() < 0.05) v += 35; v = Math.max(4, Math.min(96, v * 0.97 + 1)); data.push(v); }
+  function heat(f) { return f < 0.5 ? PAL[0] : f < 0.8 ? PAL[1] : PAL[2]; }
+  function rgba(hex, a) { var n = parseInt(hex.slice(1), 16); return 'rgba(' + (n >> 16) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')'; }
+
+  function draw(cv, o) {
+    var dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+    cv.width = w * dpr; cv.height = h * dpr;
+    var g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    var grid = o.grid === undefined ? true : o.grid;
+    if (grid) {
+      g.strokeStyle = '#2a2a2a'; g.lineWidth = 1; g.setLineDash([2, 3]);
+      var ys = grid === 'full' ? [0.25, 0.5, 0.75] : [0.5];
+      ys.forEach(function (f) { var y = Math.round(h * f) + 0.5; g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); });
+      g.setLineDash([]);
+    }
+    var pad = 3, dx = w / (N - 1);
+    var pts = data.map(function (d, i) { return [i * dx, pad + (h - 2 * pad) * (1 - d / 100)]; });
+    var stroke = g.createLinearGradient(0, h, 0, 0);
+    stroke.addColorStop(0, PAL[0]); stroke.addColorStop(0.5, PAL[0]); stroke.addColorStop(0.62, PAL[1]); stroke.addColorStop(0.8, PAL[1]); stroke.addColorStop(0.92, PAL[2]);
+    if (o.style === 'bars' || o.style === 'cols' || o.style === 'heatbars' || o.style === 'themebars' || o.style === 'themeshade') {
+      var bw = w / N, gap = o.style === 'cols' ? 0 : Math.max(1, bw * 0.3);
+      data.forEach(function (d, i) {
+        var top = pad + (h - 2 * pad) * (1 - d / 100);
+        if (o.style === 'heatbars') g.fillStyle = heat(d / 100);
+        else if (o.style === 'themebars') g.fillStyle = '#7aa2f7';
+        else if (o.style === 'themeshade') g.fillStyle = rgba('#7aa2f7', 0.35 + 0.65 * d / 100);
+        else { var fg = g.createLinearGradient(0, h, 0, 0); fg.addColorStop(0, rgba(PAL[0], o.style === 'cols' ? 0.55 : 0.85)); fg.addColorStop(0.55, rgba(PAL[0], o.style === 'cols' ? 0.55 : 0.85)); fg.addColorStop(0.7, rgba(PAL[1], 0.85)); fg.addColorStop(0.92, rgba(PAL[2], 0.9)); g.fillStyle = fg; }
+        g.fillRect(i * bw + gap / 2, top, bw - gap, h - top);
+      });
+    } else {
+      function path() {
+        g.moveTo(pts[0][0], pts[0][1]);
+        for (var i = 1; i < pts.length - 1; i++) g.quadraticCurveTo(pts[i][0], pts[i][1], (pts[i][0] + pts[i + 1][0]) / 2, (pts[i][1] + pts[i + 1][1]) / 2);
+        g.lineTo(pts[pts.length - 1][0], pts[pts.length - 1][1]);
+      }
+      if (o.style === 'fill') {
+        var fill = g.createLinearGradient(0, 0, 0, h); fill.addColorStop(0, rgba(PAL[1], 0.22)); fill.addColorStop(1, rgba(PAL[0], 0));
+        g.beginPath(); path(); g.lineTo(w, h); g.lineTo(0, h); g.closePath(); g.fillStyle = fill; g.fill();
+      }
+      g.beginPath(); path(); g.lineWidth = o.style === 'line' ? 1.8 : 1.6; g.lineJoin = 'round'; g.strokeStyle = stroke; g.stroke();
+      var lp = pts[pts.length - 1], dc = heat(1 - lp[1] / h);
+      g.beginPath(); g.arc(w - 3, lp[1], 5, 0, 7); g.fillStyle = rgba(dc, 0.18); g.fill();
+      g.beginPath(); g.arc(w - 3, lp[1], 2.6, 0, 7); g.fillStyle = dc; g.fill();
+    }
+    var labs = [];
+    if (o.vlab !== false) labs.push(['100%', 2, 6, 'left'], ['50%', 2, Math.round(h / 2), 'left']);
+    labs.push([o.span || '15m', w - 2, h - 6, 'right']);
+    g.font = '9px ui-monospace, "SF Mono", Menlo, monospace'; g.textBaseline = 'middle';
+    labs.forEach(function (l) {
+      g.textAlign = l[3]; var tw = g.measureText(l[0]).width; var x0 = l[3] === 'right' ? l[1] - tw - 2 : l[1] - 2;
+      g.fillStyle = 'rgba(0,0,0,.78)'; g.fillRect(x0, l[2] - 6, tw + 4, 12); g.fillStyle = '#a3a3a3'; g.fillText(l[0], l[1], l[2]);
+    });
+  }
+
+  var TIMES = {
+    rel: { '15m': ['−15m', '−7.5m', 'now'], '24h': ['−24h', '−12h', 'now'] },
+    three: { '15m': ['14:17', '14:24', '14:32'], '24h': ['Sat 14:32', '02:32', '14:32'] },
+    now: { '15m': ['14:17', '14:24', 'now'], '24h': ['Sat 14:32', '02:32', 'now'] },
+    round: { '15m': [['14:20', 0.2], ['14:25', 0.533], ['14:30', 0.867]], '24h': [['18:00', 0.144], ['00:00', 0.394], ['06:00', 0.644], ['12:00', 0.894]] }
+  };
+  function timeRow(o) {
+    var kind = o.time || 'rel', span = o.span || '15m', t = TIMES[kind][span];
+    if (kind === 'round') return '<div class="ctime abs">' + t.map(function (x) { return '<span style="left:' + (x[1] * 100) + '%">' + x[0] + '</span>'; }).join('') + '</div>';
+    return '<div class="ctime">' + t.map(function (x) { return '<span>' + x + '</span>'; }).join('') + '</div>';
+  }
+  document.querySelectorAll('[data-chart]').forEach(function (el) {
+    var o = JSON.parse(el.dataset.chart);
+    el.innerHTML = '<div class="chh"><b>42%</b><span>CPU · 8 cores</span></div><div class="cvw"><canvas></canvas></div>' + timeRow(o);
+    draw(el.querySelector('canvas'), o);
+  });
+
+  var IC = {
+    fill: '<svg viewBox="0 0 26 12"><path d="M0 9 L5 6 L9 8 L14 3 L19 6 L26 2 L26 12 L0 12z" fill="currentColor" opacity=".3"/><path d="M0 9 L5 6 L9 8 L14 3 L19 6 L26 2" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>',
+    line: '<svg viewBox="0 0 26 12"><path d="M0 9 L5 6 L9 8 L14 3 L19 6 L26 2" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>',
+    bars: '<svg viewBox="0 0 26 12"><g fill="currentColor"><rect x="1" y="7" width="3" height="5"/><rect x="6" y="4" width="3" height="8"/><rect x="11" y="8" width="3" height="4"/><rect x="16" y="2" width="3" height="10"/><rect x="21" y="5" width="3" height="7"/></g></svg>',
+    smooth: '<svg viewBox="0 0 26 12"><path d="M0 9 C5 3 9 10 14 5 S22 3 26 4" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>'
+  };
+  function seg(opts, on) { return '<div class="seg">' + opts.map(function (o, i) { return '<a class="' + (i === on ? 'on' : '') + '">' + (o[1] || '') + o[0] + '</a>'; }).join('') + '</div>'; }
+  function tg(on) { return '<a class="tg' + (on ? ' on' : '') + '"></a>'; }
+  function row(label, ctl, sub, isNew) { return '<div class="sr"><span>' + label + (isNew ? '<i class="nw">new</i>' : '') + (sub ? '<em>' + sub + '</em>' : '') + '</span>' + ctl + '</div>'; }
+  function grp(t, rows) { return '<div class="sg"><div class="sgh">' + t + '</div><div class="srows">' + rows.join('') + '</div></div>'; }
+  var R = {
+    style: row('Graph style', seg([['Smooth', IC.smooth], ['Pixel']], 0)),
+    line: row('Line style', seg([['', IC.fill], ['', IC.line], ['', IC.bars]], 0), 'Smooth graphs only', true),
+    color: row('Color', seg([['Heat'], ['Theme']], 0)),
+    grid: row('Gridlines', tg(true), '', true),
+    histOld: row('History', seg([['1m'], ['5m'], ['15m']], 2)),
+    hist: row('History', seg([['1m'], ['5m'], ['15m'], ['1h'], ['6h'], ['24h']], 2)),
+    time: row('Time labels', seg([['Relative'], ['Clock']], 0), '', true),
+    bg: row('Record in background', tg(true), 'Keeps long history full while the panel is closed', true),
+    refresh: row('Refresh', '<span class="stp2"><a>−</a><b>2000ms</b><a>+</a></span>'),
+    cuFocus: row('Open cleanup terminal', tg(true), 'Switch to the agent when cleanup starts', true),
+    cuAgent: row('Cleanup agent', seg([['Claude'], ['Codex'], ['Grok']], 0), 'Only if Orca\'s default can\'t be read', true)
+  };
+  var LAYOUT = {
+    now: [grp('Graphs', [R.style, R.color, R.histOld, R.refresh])],
+    a: [grp('Graphs', [R.style, R.line, R.color, R.grid, R.hist, R.time, R.bg, R.refresh]), grp('Cleanup', [R.cuFocus, R.cuAgent])],
+    b: [grp('Graphs', [R.style, R.line, R.color, R.grid]), grp('Timeline', [R.hist, R.time, R.bg, R.refresh]), grp('Cleanup', [R.cuFocus, R.cuAgent])]
+  };
+  document.querySelectorAll('[data-set-layout]').forEach(function (el) { el.innerHTML = LAYOUT[el.dataset.setLayout].join(''); });
+})();
+</script>
+
+<section id="manual">
+  <h3>Manual copy</h3>
+  <textarea id="answer" readonly placeholder="Click options above. Your answer appears here."></textarea>
+  <div id="legend"></div>
+</section>
+
+<div id="bar">
+  <div id="groups" style="display:flex;flex-wrap:wrap;gap:10px 18px"></div>
+  <div class="actions">
+    <span id="count"></span>
+    <input id="line" readonly aria-label="Answer line">
+    <button id="copy">Copy my picks</button>
+    <button id="clear">Clear</button>
+    <span id="toast"></span>
+  </div>
+</div>
+
+<script>
+(function () {
+  var KEY = document.body.dataset.key || location.pathname;
+  var state = { picks: {}, notes: {} };
+  try {
+    var saved = JSON.parse(localStorage.getItem(KEY) || "{}");
+    state.picks = saved.picks || {};
+    state.notes = saved.notes || {};
+  } catch (e) {}
+
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+  function issueOf(code) { var m = /^(\d+)/.exec(code); return m ? m[1] : code; }
+
+  var issues = [];
+  var options = {};
+  var labels = {};
+  var cards = {};
+
+  document.querySelectorAll(".issue").forEach(function (sec) {
+    var id = sec.dataset.issue;
+    var title = sec.querySelector("h2");
+    labels[id] = title ? title.textContent.replace(/^\s*\d+\s*/, "").trim() : id;
+    issues.push(id);
+    options[id] = [];
+
+    sec.querySelectorAll(".col").forEach(function (col) {
+      var chip = col.querySelector(".cap .pick");
+      if (!chip) return;
+      var code = chip.textContent.trim();
+      if (!/^\d+[A-Za-z]/.test(code)) return;
+      var name = (chip.nextSibling && chip.nextSibling.textContent || "").trim();
+      col.dataset.opt = code;
+      var tick = document.createElement("span");
+      tick.className = "tick";
+      tick.textContent = "✓";
+      col.appendChild(tick);
+      col.addEventListener("click", function (ev) {
+        if (ev.target.closest("textarea, input, a, select")) return;
+        choose(code);
+      });
+      cards[code] = col;
+      options[id].push({ code: code, name: name });
+    });
+
+    if (sec.dataset.keep !== "drawn") options[id].push({ code: id + "-keep", name: "keep as-is" });
+
+    var ta = document.createElement("textarea");
+    ta.className = "notes";
+    ta.dataset.issue = id;
+    ta.placeholder = "Notes on " + id + ": what's off, or what would make it the one";
+    ta.value = state.notes[id] || "";
+    ta.addEventListener("input", function () {
+      if (ta.value.trim()) state.notes[id] = ta.value; else delete state.notes[id];
+      save();
+      render();
+    });
+    sec.appendChild(ta);
+  });
+
+  var groups = document.getElementById("groups");
+  issues.forEach(function (id) {
+    var g = document.createElement("div");
+    g.className = "grp";
+    var b = document.createElement("b");
+    b.textContent = id;
+    g.appendChild(b);
+    options[id].forEach(function (o) {
+      var btn = document.createElement("button");
+      btn.dataset.code = o.code;
+      btn.title = o.name;
+      btn.textContent = /-keep$/.test(o.code) ? "keep" : o.code.slice(id.length);
+      btn.addEventListener("click", function () {
+        choose(o.code);
+        if (cards[o.code]) cards[o.code].scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+      });
+      g.appendChild(btn);
+    });
+    groups.appendChild(g);
+  });
+
+  document.getElementById("legend").textContent = issues.map(function (id) {
+    return id + "  " + labels[id] + "\n" + options[id].map(function (o) {
+      return "    " + o.code + "  " + o.name;
+    }).join("\n");
+  }).join("\n");
+
+  function choose(code) {
+    var id = issueOf(code);
+    if (state.picks[id] === code) delete state.picks[id]; else state.picks[id] = code;
+    save();
+    render();
+  }
+
+  function answerLine() {
+    return issues.filter(function (id) { return state.picks[id]; })
+      .map(function (id) { return state.picks[id]; }).join("  ");
+  }
+
+  function fullAnswer() {
+    var out = answerLine();
+    var notes = issues.filter(function (id) { return state.notes[id] && state.notes[id].trim(); })
+      .map(function (id) { return id + " (" + labels[id] + "): " + state.notes[id].trim().replace(/\s*\n\s*/g, " / "); });
+    if (notes.length) out += "\n\n" + notes.join("\n");
+    return out;
+  }
+
+  function render() {
+    Object.keys(cards).forEach(function (code) {
+      cards[code].classList.toggle("picked", state.picks[issueOf(code)] === code);
+    });
+    document.querySelectorAll("#groups button").forEach(function (btn) {
+      btn.classList.toggle("on", state.picks[issueOf(btn.dataset.code)] === btn.dataset.code);
+    });
+    var n = issues.filter(function (id) { return state.picks[id]; }).length;
+    document.getElementById("count").textContent = n + " / " + issues.length;
+    document.getElementById("line").value = answerLine();
+    document.getElementById("answer").value = fullAnswer();
+  }
+
+  function flash(msg) {
+    var t = document.getElementById("toast");
+    t.textContent = msg;
+    setTimeout(function () { t.textContent = ""; }, 2500);
+  }
+
+  function fallbackCopy() {
+    var ta = document.getElementById("answer");
+    ta.focus();
+    ta.select();
+    var ok = false;
+    try { ok = document.execCommand("copy"); } catch (e) {}
+    if (ok) flash("copied");
+    else { ta.scrollIntoView({ block: "center" }); flash("press ⌘C"); }
+  }
+
+  document.getElementById("copy").addEventListener("click", function () {
+    var text = fullAnswer();
+    if (!text) { flash("nothing picked"); return; }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { flash("copied"); }, fallbackCopy);
+    } else fallbackCopy();
+  });
+
+  document.getElementById("clear").addEventListener("click", function () {
+    state = { picks: {}, notes: {} };
+    document.querySelectorAll("textarea.notes").forEach(function (ta) { ta.value = ""; });
+    save();
+    render();
+  });
+
+  ["line", "answer"].forEach(function (id) {
+    document.getElementById(id).addEventListener("focus", function (ev) { ev.target.select(); });
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

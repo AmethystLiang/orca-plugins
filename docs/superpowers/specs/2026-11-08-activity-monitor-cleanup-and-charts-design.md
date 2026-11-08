@@ -1,6 +1,6 @@
 # Activity Monitor: agent cleanup button and chart settings
 
-Date: 2026-11-08 · Plugin: `plugins/activity-monitor` (1.0.0 shipped) · Mockups: `docs/design/activity-monitor/mockup-cleanup.html`, `docs/design/activity-monitor/mockup-charts.html`
+Date: 2026-11-08 · Plugin: `plugins/activity-monitor` (1.0.0 shipped) · Mockups: `docs/design/activity-monitor/mockup-cleanup.html`, `docs/design/activity-monitor/mockup-chart-settings.html`
 
 ## Why
 
@@ -100,7 +100,7 @@ Built in the worker, reusing the fencing and sanitizing in `src/explain.ts` (`sa
 - History is memory only and starts fresh when Orca restarts.
 - **Structural change:** today history is a fixed count of samples (`HISTORY = 900` in `src/sampler.ts`, `span()` in `panel/app.js:896`), so the time covered depends on the refresh rate. At 100ms it covers only 90 seconds. History must become **time-based**: full-resolution points for recent data, and time buckets for older data (for example, 1s for the last 15m, 10s to 6h, 60s to 24h) so 24h stays small. The exact tiers are the builder's call. The rule: any span renders roughly the same number of points, and memory stays bounded (a few MB at most).
 
-### Look (settled, mockup-charts.html)
+### Look (settled, mockup-chart-settings.html)
 
 - **Line style** (new, Smooth graphs only; Pixel keeps its braille look): **Line + fill** (default, today's look) · **Line** · **Bars**.
   - Bars in **Heat** color: each bar takes its value's heat color (green under 50%, amber under 80%, red above), using the same palette as today.
@@ -115,11 +115,13 @@ Graphs group, in order: Graph style · Line style · Color · Gridlines · Histo
 New **Cleanup** group after Graphs: Open cleanup terminal (toggle, default on; "Switch to the agent when cleanup starts"), then "Cleanup agent" only if the auto spike fails.
 "Reset to defaults" covers the new prefs.
 
-## Spikes (do first, results decide the build)
+## Spikes (done 2026-11-08, results)
 
-1. `agent.launch` with `agent: "auto"`: does it start Orca's Default Agent? → decides whether the Cleanup agent setting exists.
-2. Bringing a terminal to the front: does `orca terminal switch` (Orca CLI, run from the trusted worker) accept the `terminalId` returned by `agent.launch`? If not, fall back to `workspace.open` (switches to the workspace, not the specific tab) and change the toggle's subtitle to say so.
-3. Does `agent.status.changed` fire for terminals in unfocused workspaces?
+1. **`agent: "auto"` → rejected** (`invalid_params: agent: unknown agent`). Orca doesn't expose the Default Agent to plugins or the CLI (`orca agent launch` also requires `--agent`). → **Settings → Cleanup → "Cleanup agent" (Claude / Codex / Grok, default Claude) ships.**
+2. **Prompt delivery:** `agent.launch` with a `prompt` starts the agent, but the prompt is lost (`agent_launch_terminal_not_running_agent`, logged only, no error returned). → Launch **without** a prompt, wait for the first `agent.status.changed` for the returned `terminalId` (it fires when the agent is idle, about 10s for Claude; time out after 45s), then send the prompt with host `terminal.sendText` (`enter: true`). Fall back to the Orca CLI (`orca terminal send --terminal <id> --text <prompt> --enter`), which works across workspaces.
+3. **Bringing the terminal to the front:** `orca terminal switch --terminal <id>` takes the same `term_…` handle that `agent.launch` returns. It was not run live during the spike (it would have pulled the user's window away); confirm in the final live check. The worker finds the CLI on `PATH`, then at `/Applications/Orca.app/Contents/Resources/bin/orca` on macOS.
+4. **`agent.status.changed`** arrives for terminals in unfocused workspaces. It needs `contributes.events: [{ "on": "agent.status.changed" }]` in the manifest. The payload has `terminalId`, `state` and `mainAgent.state`.
+5. **Capabilities** added: `workspace:read` (readContext/list), `agent:launch`, `terminal:read`. `workspace.readContext` gives `{ branch, displayName, terminals }`; matching `workspace.list` by `name === displayName` works (branch can be `""` vs `null`).
 
 ## Constraints
 

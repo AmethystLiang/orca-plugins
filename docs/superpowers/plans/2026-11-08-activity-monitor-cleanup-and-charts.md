@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript trusted worker run by Orca with Node type-stripping; a plain-JS HTML panel; tests with `node:test` run via `orca plugin test .` from `plugins/activity-monitor`.
 
-**Spec:** `docs/superpowers/specs/2026-11-08-activity-monitor-cleanup-and-charts-design.md`. Mockups: `docs/design/activity-monitor/mockup-cleanup.html`, `docs/design/activity-monitor/mockup-charts.html`.
+**Spec:** `docs/superpowers/specs/2026-11-08-activity-monitor-cleanup-and-charts-design.md`. Mockups: `docs/design/activity-monitor/mockup-cleanup.html`, `docs/design/activity-monitor/mockup-chart-settings.html`.
 
 ## Global Constraints
 
@@ -33,7 +33,7 @@ Each line has its pinning test in the owning task (Task 2 → 2, 4; Task 3 → 1
 
 ---
 
-### Task 0: Spikes (orchestrator does this live, not a subagent)
+### Task 0: Spikes (DONE; results in the spec under "Spikes")
 
 Each spike's result gets written into `docs/superpowers/specs/...design.md` under "Spikes", with what was observed.
 
@@ -122,13 +122,13 @@ Each spike's result gets written into `docs/superpowers/specs/...design.md` unde
   - `parseProposed(lines: string[]): number | null` (last line matching `/^\s*Proposed:\s*(\d+)\s*$/`)
   - `pillState(s: { agent: 'working'|'blocked'|'waiting'|'done'|null; alive: boolean; proposed: number | null; gone: number }): { kind: 'rest' } | { kind: 'working' } | { kind: 'review'; n: number | null } | { kind: 'quit'; n: number }`. Rules: `!alive` → rest; working → working; idle and `gone === 0` → review; idle and `gone > 0` → quit.
 - Produces worker panel handlers:
-  - `cleanup.start` → `{ ok: true, state } | { ok: false, reason: string }`. Resolves the focused workspace (`workspace.readContext` matched to `workspace.list` by name + branch; zero or several matches → `{ ok: false, reason: 'Open a workspace first' }`). Computes suspects (Task 3, `excludePids` = the session's shell and agent pids once known). Calls `agent.launch` with the agent from Task 0 (`'auto'`, or the stored pref). Stores `{ terminalId, suspects, startedAt }`. Focuses the terminal when the `focus` pref is on (Task 0 method). If a session is already alive, it focuses that one and returns its state instead.
+  - `cleanup.start` → `{ ok: true, state } | { ok: false, reason: string }`. Resolves the focused workspace (`workspace.readContext` matched to `workspace.list` by name + branch; zero or several matches → `{ ok: false, reason: 'Open a workspace first' }`). Computes suspects (Task 3, `excludePids` = the session's shell and agent pids once known). Calls `agent.launch({ workspaceId, agent })` with **no prompt**, where `agent` is the stored pref (default `'claude'`). Waits for the first `agent.status.changed` with that `terminalId` (45s timeout → `{ ok: false, reason: 'Your agent did not start' }`). Then sends the prompt with `terminal.sendText({ terminalId, text, enter: true })`, falling back to the Orca CLI `orca terminal send --terminal <id> --text <prompt> --enter` (spec, Spikes 2). Stores `{ terminalId, suspects, startedAt }`. Focuses the terminal when the `focus` pref is on, via the CLI `orca terminal switch --terminal <id>` (CLI path: `PATH`, then `/Applications/Orca.app/Contents/Resources/bin/orca`; run it with `nodeDeps.run`). If a session is already alive, it focuses that one and returns its state instead.
   - `cleanup.state` → `{ state: PillState }`. Uses the last `agent.status.changed` for the `terminalId`, `terminal.read` (≤ 200 lines) for `parseProposed`, `gone` = suspects whose `pid + start` is no longer listed, and `alive` = the terminal is still present (`terminal.read` succeeds).
   - `cleanup.open` → focuses the session terminal and resets the state to rest when it was `quit`.
   - A session that has been in `quit` for 10 minutes is dropped, and the button returns to rest.
   - `prefs.sync` → input `{ record: boolean, focus: boolean, agent?: string }`. It persists via `storage.set('prefs', …)`, applies `sampler.setRecording(record)`, and is loaded with `storage.get` on activate.
   - The 15s tracker timer runs while `record` is on or the panel has read in the last 10s. It calls `provider.procs()` → `tracker.add`.
-  - `events.subscribe('agent.status.changed')` updates the stored agent state. Also re-read `agents.list` on each `cleanup.state`.
+  - `orca.events.on('agent.status.changed', …)` (the manifest already declares it, Task 0) updates the stored agent state. Also re-read `agents.list` on each `cleanup.state`.
 
 - [ ] **Step 1: Failing tests:** `pillState` covers every row of the rules, including a `done` state with `gone 0` → review. Add `{ alive: false }` → rest. (Review Focus 3) `parseProposed(['…','Proposed: 4'])` → 4; no match → null.
 - [ ] **Step 2: Failing worker tests** (follow the existing `tests/worker.test.mjs` fakes): `cleanup.start` with no focused workspace → `Open a workspace first`; with one → `agent.launch` is called once with the prompt; calling it a second time while alive → no second launch; `prefs.sync({ record: false })` → `storage.set` is called.
@@ -167,7 +167,7 @@ Each spike's result gets written into `docs/superpowers/specs/...design.md` unde
 
 - [ ] **Step 1: Failing test** in a new `tests/format.test.mjs` (load `panel/format.js` the way `tests/columns.test.mjs` loads `panel/columns.js`): `clockTicks(900, Date.parse('2026-11-08T14:32:00'))` → labels for 14:20, 14:25, 14:30 at fracs ≈ 0.2, 0.533, 0.867; `clockTicks(86400, …)` → 3–4 ticks, all with frac in (0,1).
 - [ ] **Step 2:** Run → FAIL. Implement `clockTicks`. Run → PASS.
-- [ ] **Step 3:** Settings: one Graphs group in this order: Graph style · Line style (three icon segments; subtitle "Smooth graphs only") · Color · Gridlines (toggle) · History (1m 5m 15m 1h 6h 24h) · Time labels (Relative / Clock) · Record in background (toggle; subtitle "Keeps long history full while the panel is closed") · Refresh. Then a new Cleanup group: Open cleanup terminal (toggle; subtitle "Switch to the agent when cleanup starts"), plus Cleanup agent (Claude / Codex / Grok) **only** if Task 0 found that `'auto'` doesn't work. Changing `record`, `focus` or `agent` calls `prefs.sync`. Also call `prefs.sync` once on load. Reset to defaults covers every new pref.
+- [ ] **Step 3:** Settings: one Graphs group in this order: Graph style · Line style (three icon segments; subtitle "Smooth graphs only") · Color · Gridlines (toggle) · History (1m 5m 15m 1h 6h 24h) · Time labels (Relative / Clock) · Record in background (toggle; subtitle "Keeps long history full while the panel is closed") · Refresh. Then a new Cleanup group: Open cleanup terminal (toggle; subtitle "Switch to the agent when cleanup starts"), plus Cleanup agent (Claude / Codex / Grok, default Claude; values `claude`/`codex`/`grok`). Task 0 found that `'auto'` doesn't work. Changing `record`, `focus` or `agent` calls `prefs.sync`. Also call `prefs.sync` once on load. Reset to defaults covers every new pref.
 - [ ] **Step 4:** Charts: send `span: prefs.hist` with each `stats.read`. When the response is `windowed`, replace the chart buffer with `history` and stop the sliding animation for that frame. Grid on = dashed lines at 25/50/75% plus the value labels; off = neither (the span label stays). Pixel (braille) ignores `line`. Per-core sparklines stay `fill`. Time rows use `clockTicks` (absolutely positioned) when `clock` is on, and today's relative labels otherwise.
 - [ ] **Step 5:** Verify headless: for each of `line` × `color` and `grid` on/off, take a screenshot of the CPU page and assert there are no console errors. With `hist: 86400` and a fake worker that returns 600 windowed points, the chart draws without throwing. Save `docs/design/activity-monitor/charts-after-*.png`.
 - [ ] **Step 6:** Commit: "Add line styles, gridlines, clock labels and 24h history to charts".

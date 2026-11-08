@@ -29,6 +29,11 @@
         "tone": "danger",
         "tooltip": "Activity Monitor: memory is critical; your computer may lock up"
       }
+    ],
+    "events": [
+      {
+        "on": "agent.status.changed"
+      }
     ]
   },
   "capabilities": [
@@ -40,6 +45,15 @@
     },
     {
       "kind": "terminal:send"
+    },
+    {
+      "kind": "workspace:read"
+    },
+    {
+      "kind": "agent:launch"
+    },
+    {
+      "kind": "terminal:read"
     }
   ],
   "cover": {
