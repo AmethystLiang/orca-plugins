@@ -20,6 +20,8 @@ function stubProvider(over = {}) {
     quit: async () => ({ ok: true }),
     detailsEvery: 0,
     details: async () => null,
+    cwds: async () => new Map(),
+    args: async () => new Map(),
     ...over
   }
 }

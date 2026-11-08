@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { readFile, readdir } from 'node:fs/promises'
+import { readFile, readdir, readlink } from 'node:fs/promises'
 import os from 'node:os'
 import type { Memory, Proc } from './parse.ts'
 import type { Battery, Extra, Pair } from './details.ts'
@@ -8,6 +8,7 @@ export type Deps = {
   run(command: string, args: string[]): Promise<string | null>
   read(path: string): Promise<string>
   list(path: string): Promise<string[]>
+  readlink(path: string): Promise<string | null>
 }
 
 export type Raw = {
@@ -42,6 +43,8 @@ export type Provider = {
   details(energy: boolean): Promise<Details | null>
   identify(pid: number): Promise<Identity | null>
   quit(pid: number, force: boolean): Promise<QuitResult>
+  cwds(pids: number[]): Promise<Map<number, string | null>>
+  args(pids: number[]): Promise<Map<number, string>>
 }
 
 const ENV = { ...process.env, LC_ALL: 'C', LANG: 'C' }
@@ -57,6 +60,9 @@ export const nodeDeps: Deps = {
   },
   list(path) {
     return readdir(path).catch(() => [] as string[])
+  },
+  readlink(path) {
+    return readlink(path).catch(() => null)
   }
 }
 
