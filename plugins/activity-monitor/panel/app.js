@@ -16,7 +16,7 @@
   var QUIT_GRACE = 8000
   var NAMES = { all: 'All', cpu: 'CPU', mem: 'Memory', net: 'Network', disk: 'Disk', gpu: 'GPU', energy: 'Energy', procs: 'Processes' }
   var ICONS = { all: 'grid', cpu: 'cpu', mem: 'mem', net: 'net', disk: 'disk', gpu: 'gpu', energy: 'bolt', procs: 'proc' }
-  var FOCUS_KEYS = ['tile', 'tab', 'hero', 'hquit', 'loadmore', 'htoastx', 'sort', 'colmenu', 'togglecol', 'resetcols', 'quitsel', 'quit', 'force', 'copy', 'copyname', 'explain', 'no', 'gear', 'pause', 'step', 'setgraph', 'setcolor', 'sethist', 'setstrip', 'setalert', 'setsort', 'setpulse', 'setopen', 'setrows', 'settext', 'resetprefs']
+  var FOCUS_KEYS = ['tile', 'tab', 'hero', 'hquit', 'loadmore', 'htoastx', 'sort', 'colmenu', 'togglecol', 'resetcols', 'quitsel', 'quit', 'force', 'copy', 'copyname', 'explain', 'no', 'gear', 'pause', 'step', 'cleanup', 'cutoastx', 'setgraph', 'setcolor', 'sethist', 'setstrip', 'setalert', 'setsort', 'setpulse', 'setopen', 'setrows', 'settext', 'resetprefs']
 
   var DEFAULTS = { graph: 'smooth', color: 'heat', rate: 1000, hist: 60, strip: true, alert: true, sort: 'cpu', pulse: true, open: 'last', rows: 'default', text: 'default' }
   var HISTS = [60, 300, 900]
@@ -46,7 +46,7 @@
   var view = {
     paused: false, settings: false, sort: prefs.sort, query: '', ask: null, askMsg: '', stuck: false, gone: {}, error: '', busy: false,
     menu: null, colMenu: null, heroMenu: null, open: null, unselect: null, copied: null, holding: false, sel: null, drag: null, dragged: false, fitted: [],
-    glyph: 7.8, seen: {}, rows: 150, toastSeen: 0, hmsg: '', hmsgAt: 0, pointer: false, composing: false, hoverList: false, order: null, pending: false, dirty: true
+    glyph: 7.8, seen: {}, rows: 150, toastSeen: 0, cleanup: { kind: 'rest', n: null, count: 0 }, cleanupStarting: false, cleanupErr: '', cleanupErrAt: 0, hmsg: '', hmsgAt: 0, pointer: false, composing: false, hoverList: false, order: null, pending: false, dirty: true
   }
   var palette = { primary: '#e6e6e6', secondary: '#a3a3a3', grid: '#1f1f1f', bg: '#000000' }
 
@@ -57,7 +57,7 @@
   function savePrefs() { try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)) } catch (e) {} }
   function push(arr, v) { arr.push(v); if (arr.length > HISTORY) arr.shift() }
   function esc(s) { return String(s).replace(/[&<>"']/g, function (ch) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch] }) }
-  function icon(id) { return '<svg class="ico"><use href="#i-' + id + '"/></svg>' }
+  function icon(id, cls) { return '<svg class="ico' + (cls ? ' ' + cls : '') + '"><use href="#i-' + id + '"/></svg>' }
 
   function toRgb(color, fallback) {
     try {
@@ -619,7 +619,7 @@
     pips += '</span>'
     var q = ''
     if (step === 4 && h.culprit && h.culprit.quittable) {
-      q = '<a class="hq" data-hquit tabindex="0">Quit ' + esc(h.culprit.app) + '</a>'
+      q = '<a class="hq" data-hquit tabindex="0" title="Quit ' + esc(h.culprit.app) + '">Quit<span class="n"> ' + esc(h.culprit.app) + '</span></a>'
     }
     var tipText = h.cause + (h.culprit && step === 4 ? ' · ' + h.culprit.app + ' ' + Fmt.memSize(h.culprit.mem) : '')
     var open = !!pop.el
@@ -791,6 +791,102 @@
       '<a data-step="-1" tabindex="0" aria-label="Refresh faster">−</a><b class="num">' + prefs.rate + 'ms</b><a data-step="1" tabindex="0" aria-label="Refresh slower">+</a></div>'
   }
 
+  var CLEANUP_POLL_MS = 3000
+  var RING_MS = 900
+  var cleanupTimer = null
+  var cleanupSeq = 0
+
+  function cleanupTip(c) {
+    if (c.kind === 'working') return 'Agent is checking ' + c.count + ' processes · click to open'
+    if (c.kind === 'review') return 'Agent has a kill list for you · click to review'
+    if (c.kind === 'quit') return 'Cleanup finished: ' + c.n + ' quit · click to open'
+    return 'Ask your agent to clean up stale processes'
+  }
+
+  function cleanupText(c) {
+    if (c.kind === 'working') return 'Cleaning…'
+    if (c.kind === 'review') return c.n == null ? 'Review' : 'Review ' + c.n
+    if (c.kind === 'quit') return c.n + ' quit'
+    return ''
+  }
+
+  function ring() { return '<span class="ring" style="animation-delay:-' + Math.round(performance.now() % RING_MS) + 'ms"></span>' }
+
+  function cleanupButton() {
+    var c = view.cleanup
+    var tip = esc(cleanupTip(c))
+    if (c.kind === 'rest') {
+      return '<a class="ib" data-cleanup title="' + tip + '" aria-label="' + tip + '" tabindex="0"' + (view.cleanupStarting ? ' aria-busy="true"' : '') + '>' + (view.cleanupStarting ? ring() : icon('broom')) + '</a>'
+    }
+    var text = esc(cleanupText(c))
+    var cls = c.kind === 'review' ? ' review' : c.kind === 'quit' ? ' done' : ''
+    var lead = c.kind === 'working' ? ring() : c.kind === 'quit' ? icon('check', 'wide') + icon('broom', 'slim') : icon('broom')
+    var dot = c.kind === 'review' ? '<span class="dot"></span>' : c.kind === 'quit' ? '<span class="dot ok"></span>' : ''
+    return '<a class="cu' + cls + '" data-cleanup title="' + tip + '" aria-label="' + text + '. ' + tip + '" tabindex="0">' + lead + '<span class="t">' + text + '</span>' + dot + '</a>'
+  }
+
+  function cleanupApply(r) {
+    if (!r || !r.state) return
+    var st = r.state
+    view.cleanup = { kind: st.kind, n: typeof st.n === 'number' ? st.n : null, count: typeof r.count === 'number' ? r.count : view.cleanup.count }
+    clearTimeout(cleanupTimer)
+    if (st.kind !== 'rest') cleanupTimer = setTimeout(cleanupRead, CLEANUP_POLL_MS)
+  }
+
+  function cleanupRead() {
+    if (!api || !api.plugin) return
+    var my = ++cleanupSeq
+    api.plugin.request('cleanup.state', {}, { timeoutMs: 15000 }).then(function (r) {
+      if (my !== cleanupSeq) return
+      cleanupApply(r)
+      render()
+    }, function () {
+      if (my !== cleanupSeq) return
+      clearTimeout(cleanupTimer)
+      cleanupTimer = setTimeout(cleanupRead, CLEANUP_POLL_MS)
+    })
+  }
+
+  function cleanupError(msg) {
+    view.cleanupErr = msg || 'Could not start a cleanup'
+    view.cleanupErrAt = Date.now()
+    setTimeout(render, TOAST_MS + 50)
+  }
+
+  function cleanupClick() {
+    if (!api || !api.plugin || view.cleanupStarting) return
+    var my = ++cleanupSeq
+    if (view.cleanup.kind === 'rest') {
+      view.cleanupStarting = true
+      view.cleanupErr = ''
+      render()
+      api.plugin.request('cleanup.start', {}, { timeoutMs: 60000 }).then(function (r) {
+        if (!r || !r.ok) cleanupError(r && r.reason)
+        else if (my === cleanupSeq) cleanupApply(r)
+      }, function (e) {
+        cleanupError(e && (e.message || e.code))
+      }).then(function () {
+        view.cleanupStarting = false
+        render()
+      })
+      return
+    }
+    api.plugin.request('cleanup.open', {}, { timeoutMs: 15000 }).then(function (r) {
+      if (my !== cleanupSeq) return
+      cleanupApply(r)
+      render()
+    }, function (e) {
+      cleanupError(e && (e.message || e.code))
+      render()
+    })
+  }
+
+  function cleanupToast() {
+    if (!view.cleanupErr || Date.now() - view.cleanupErrAt > TOAST_MS) return ''
+    var msg = esc(view.cleanupErr)
+    return '<div class="htoast" role="alert"><i class="hdot" style="--c:var(--danger)"></i><b class="cerr" title="' + msg + '">' + msg + '</b><a class="ib" data-cutoastx title="Dismiss" tabindex="0">' + icon('x') + '</a></div>'
+  }
+
   function focusKey() {
     var a = document.activeElement
     if (!a || !root.contains(a)) return null
@@ -828,7 +924,7 @@
       body = settingsView()
     } else {
       var lv = data.health && data.sample ? data.health.level : 'ok'
-      top = healthToast() + '<div class="top lv-' + lv + '">' + healthStrip() + stepper() + '<a class="ib" data-pause title="' + (view.paused ? 'Resume' : 'Pause') + '" tabindex="0">' + icon(view.paused ? 'play' : 'pause') +
+      top = (healthToast() || cleanupToast()) + '<div class="top lv-' + lv + '">' + healthStrip() + stepper() + cleanupButton() + '<a class="ib" data-pause title="' + (view.paused ? 'Resume' : 'Pause') + '" tabindex="0">' + icon(view.paused ? 'play' : 'pause') +
         '</a><a class="ib" data-gear title="Settings" tabindex="0">' + icon('gear') + '</a></div>'
       if (!data.sample) {
         body = '<div class="note">' + esc(view.error || (api ? 'Reading your system…' : 'Open this panel in Orca.')) + '</div>'
@@ -1116,6 +1212,8 @@
     if (d.force) return
     if (d.step) { setRate(prefs.rate + Number(d.step) * RATE_STEP); return }
     if ('hquit' in d) { quitCulprit(); return }
+    if ('cleanup' in d) { cleanupClick(); return }
+    if ('cutoastx' in d) { view.cleanupErr = ''; render(); return }
     if ('loadmore' in d) { loadMore(); return }
     if ('htoastx' in d) { view.toastSeen = data.health ? data.health.alertAt : 0; render(); return }
     if (d.togglecol) { toggleCol(d.togglecol); render(); restoreFocus({ selector: '[data-togglecol="' + d.togglecol + '"]' }); return }
@@ -1431,4 +1529,5 @@
   requestAnimationFrame(frame)
   render()
   schedule()
+  cleanupRead()
 })()
