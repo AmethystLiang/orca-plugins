@@ -180,8 +180,8 @@
       "releases": [
         {
           "version": "1.0.1",
-          "commit": "b51de28c6a851a23fa70a0a47a634e2214f2e121",
-          "contentHash": "6bb4286639e4b0ae33f5bf0af7021e377a86acd1db6bb40c96520408d142a27e",
+          "commit": "b78761463467d88f814f6e5325e2e1850e353415",
+          "contentHash": "8f62ecb8cfe3a47aaf8b685a6d87be753c79deefae312303127672bcc717114d",
           "execution": "trusted-worker",
           "minimumOrca": "1.4.248",
           "name": "Activity Monitor",
