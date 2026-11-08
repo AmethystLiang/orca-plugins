@@ -5,7 +5,7 @@ import type { Level } from './health.ts'
 import { buildPrompt, pickAgent } from './explain.ts'
 import type { AgentRow, ExplainInput } from './explain.ts'
 import { nodeDeps } from './deps.ts'
-import { buildCleanupPrompt, findSuspects, inspectPids, parseProposed, pillState } from './cleanup.ts'
+import { buildCleanupPrompt, cwdPids, findSuspects, inspectPids, parseProposed, pillState } from './cleanup.ts'
 import type { AgentState, CleanupSuspect, PillState } from './cleanup.ts'
 import { createTracker } from './tracker.ts'
 
@@ -38,7 +38,7 @@ type Workspace = { id: string; name: string; branch: string | null }
 const DEFAULT_PREFS: Prefs = { record: true, focus: true, agent: 'claude' }
 const REST: View = { state: { kind: 'rest' }, count: 0 }
 
-export const seams = { run: nodeDeps.run, sampler: () => createSampler() }
+export const seams = { run: nodeDeps.run, sampler: () => createSampler(), startWaitMs: START_WAIT_MS }
 
 let timer: ReturnType<typeof setInterval> | null = null
 let trackTimer: ReturnType<typeof setInterval> | null = null
@@ -122,7 +122,7 @@ export default function activate(orca: OrcaWorkerApi): void {
         waiting.delete(done)
         resolve(ok)
       }
-      const timeout = setTimeout(() => done(false), START_WAIT_MS)
+      const timeout = setTimeout(() => done(false), seams.startWaitMs)
       waiters.set(terminalId, done)
       waiting.add(done)
     })
@@ -140,7 +140,7 @@ export default function activate(orca: OrcaWorkerApi): void {
   async function collectSuspects(excludePids: number[]): Promise<CleanupSuspect[]> {
     const procs = await sampler.listProcs()
     if (!procs) return []
-    const { cwds, args } = await sampler.inspect(inspectPids(procs, tracker))
+    const { cwds, args } = await sampler.inspect(inspectPids(procs, tracker), (found) => cwdPids(procs, found))
     const { selfPids, protectedNames } = sampler.guard()
     return findSuspects({ procs, args, cwds, cwdExists: existsSync, tracker, selfPids, excludePids, protectedNames, now: Date.now() })
   }
@@ -210,12 +210,17 @@ export default function activate(orca: OrcaWorkerApi): void {
         reason: code === 'capability_denied' || code === 'consent_required' ? 'Allow agent access for Activity Monitor in Orca plugin settings' : 'Could not start your agent'
       }
     }
+    const s: Session = { terminalId, suspects, startedAt: Date.now(), sentAt: Infinity, agent: null, gone: 0, quitAt: null }
+    session = s
     if (!(await firstStatus(terminalId))) return { ok: false, reason: 'Your agent did not start' }
-    const startedAt = Date.now()
-    session = { terminalId, suspects, startedAt, sentAt: startedAt, agent: null, gone: 0, quitAt: null }
+    s.agent = null
     const sent = await sendPrompt(terminalId, prompt)
+    s.sentAt = Date.now()
     if (prefs.focus) focus(terminalId)
-    if (!sent) return { ok: false, reason: 'Your agent did not take the cleanup prompt' }
+    if (!sent) {
+      s.agent = statuses.get(terminalId) ?? null
+      return { ok: false, reason: 'Your agent did not take the cleanup prompt' }
+    }
     return { ok: true, state: { kind: 'working' }, count: suspects.length }
   }
 

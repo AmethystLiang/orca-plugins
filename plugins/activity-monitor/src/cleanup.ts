@@ -90,6 +90,16 @@ export function inspectPids(procs: Proc[], tracker: Tracker): number[] {
   return out
 }
 
+export function cwdPids(procs: Proc[], args: Map<number, string>): number[] {
+  const out: number[] = []
+  for (const p of procs) {
+    const bare = bareName(p.name)
+    const line = args.get(p.pid)
+    if (DEV_NAMES.test(bare) || AGENT_NAMES.test(bare) || (line !== undefined && (DEV_ARGS.test(line) || AGENT_ARGS.test(line)))) out.push(p.pid)
+  }
+  return out
+}
+
 export function findSuspects(input: SuspectInput): CleanupSuspect[] {
   const parents = new Map<number, number>()
   const orcaPids = new Set<number>()

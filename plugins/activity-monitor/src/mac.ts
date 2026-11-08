@@ -19,6 +19,8 @@ import {
 const PS_FIELDS = 'pid=,ppid=,pcpu=,rss=,user=,time=,lstart=,comm='
 const TOP_STATS = 'pid,threads,ports,idlew,power'
 
+const LSOF_AT_ONCE = 8
+
 export function createMac(d: Deps): Provider {
   const route = background(async () => {
     const [text, ports] = await Promise.all([d.run('route', ['-n', 'get', 'default']), d.run('networksetup', ['-listallhardwareports'])])
@@ -129,14 +131,17 @@ export function createMac(d: Deps): Provider {
       const out = new Map<number, string | null>()
       if (!pids.length) return out
       const lookup = async (list: number[]) => {
-        const text = await d.run('lsof', ['-a', '-d', 'cwd', '-Fn', '-p', list.join(',')])
+        const text = await d.run('lsof', ['-a', '-d', 'cwd', '-Fn', '-p', list.join(',')], { anyExit: true })
         return text === null ? null : parseLsofCwd(text)
       }
       let found = await lookup(pids)
       if (!found) {
-        found = new Map()
-        const each = await Promise.all(pids.map((pid) => lookup([pid])))
-        for (const part of each) if (part) for (const [pid, path] of part) found.set(pid, path)
+        const merged = new Map<number, string>()
+        for (let i = 0; i < pids.length; i += LSOF_AT_ONCE) {
+          const each = await Promise.all(pids.slice(i, i + LSOF_AT_ONCE).map((pid) => lookup([pid])))
+          for (const part of each) if (part) for (const [pid, path] of part) merged.set(pid, path)
+        }
+        found = merged
       }
       for (const pid of pids) out.set(pid, found.get(pid) ?? null)
       return out

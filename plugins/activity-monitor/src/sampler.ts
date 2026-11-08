@@ -301,11 +301,12 @@ export function createSampler(options: SamplerOptions = {}) {
     return provider.procs().catch(() => null)
   }
 
-  async function inspect(pids: number[]): Promise<{ cwds: Map<number, string | null>; args: Map<number, string> }> {
-    const [cwds, args] = await Promise.all([
-      provider.cwds(pids).catch(() => new Map<number, string | null>()),
-      provider.args(pids).catch(() => new Map<number, string>())
-    ])
+  async function inspect(
+    pids: number[],
+    pickCwds: (args: Map<number, string>) => number[] = () => pids
+  ): Promise<{ cwds: Map<number, string | null>; args: Map<number, string> }> {
+    const args = await provider.args(pids).catch(() => new Map<number, string>())
+    const cwds = await provider.cwds(pickCwds(args)).catch(() => new Map<number, string | null>())
     return { cwds, args }
   }
 

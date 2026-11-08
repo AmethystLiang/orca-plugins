@@ -371,6 +371,39 @@ test('mac cwds fall back to one lookup per pid when lsof fails on a gone pid', a
   assert.deepEqual(await mac.cwds([501, 9]), new Map([[501, '/a'], [9, null]]))
 })
 
+test('mac cwds keep what a batched lsof printed when it exits non-zero, with no per-pid retries', async () => {
+  const seen = []
+  const deps = fakeDeps({}, {})
+  deps.run = async (command, args, options) => {
+    seen.push({ args: args.join(' '), anyExit: options?.anyExit === true })
+    return options?.anyExit ? 'p501\nfcwd\nn/a\n' : null
+  }
+  const mac = createMac(deps)
+  assert.deepEqual(await mac.cwds([501, 1, 2]), new Map([[501, '/a'], [1, null], [2, null]]))
+  assert.deepEqual(seen, [{ args: '-a -d cwd -Fn -p 501,1,2', anyExit: true }])
+})
+
+test('mac cwds run at most 8 single-pid lookups at once when the batch cannot run', async () => {
+  let running = 0
+  let peak = 0
+  const deps = fakeDeps({}, {})
+  deps.run = async (command, args) => {
+    const list = args[5].split(',')
+    if (list.length > 1) return null
+    running++
+    peak = Math.max(peak, running)
+    await new Promise((resolve) => setTimeout(resolve, 2))
+    running--
+    return 'p' + list[0] + '\nfcwd\nn/d' + list[0] + '\n'
+  }
+  const mac = createMac(deps)
+  const pids = Array.from({ length: 30 }, (_, i) => 100 + i)
+  const out = await mac.cwds(pids)
+  assert.equal(out.size, 30)
+  assert.equal(out.get(129), '/d129')
+  assert.ok(peak <= 8, 'peak ' + peak)
+})
+
 test('mac args read ps output', async () => {
   const deps = fakeDeps({}, { ps: '  501 node /app/server.js --port 3000\n  502 vite\n' })
   const mac = createMac(deps)

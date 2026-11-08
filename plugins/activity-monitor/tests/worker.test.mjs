@@ -192,6 +192,38 @@ test('a suspect that disappears turns the pill to quit, and opening it returns t
   await worker.deactivate()
 })
 
+test('when no prompt send works the pill shows the idle agent, not Cleaning forever', async () => {
+  const runs = fakeCli()
+  main.seams.run = async (command, args) => {
+    runs.push([command, ...args])
+    return args[1] === 'send' ? null : ''
+  }
+  const worker = await mountWorker(main, { host: cleanupHost({ 'terminal.sendText': { accepted: false } }) })
+  const out = await started(worker)
+  assert.deepEqual(out, { ok: false, reason: 'Your agent did not take the cleanup prompt' })
+  assert.deepEqual(await worker.request('cleanup.state'), { state: { kind: 'review', n: 2 }, count: 1 })
+  await worker.request('cleanup.start')
+  assert.equal(worker.host.callsOf('agent.launch').length, 1)
+  await worker.deactivate()
+})
+
+test('an agent that never reports keeps its terminal as the session, so the next press focuses it', async () => {
+  const runs = fakeCli()
+  main.seams.startWaitMs = 20
+  try {
+    const worker = await mountWorker(main, { host: cleanupHost() })
+    assert.deepEqual(await worker.request('cleanup.start'), { ok: false, reason: 'Your agent did not start' })
+    assert.equal(worker.host.callsOf('terminal.sendText').length, 0)
+    const again = await worker.request('cleanup.start')
+    assert.equal(again.ok, true)
+    assert.equal(worker.host.callsOf('agent.launch').length, 1)
+    assert.deepEqual(runs.at(-1), ['orca', 'terminal', 'switch', '--terminal', 'term_1'])
+    await worker.deactivate()
+  } finally {
+    main.seams.startWaitMs = 45000
+  }
+})
+
 test('prefs.sync stores the prefs and the next launch uses the chosen agent without focusing', async () => {
   const runs = fakeCli()
   const host = cleanupHost()

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { AGENT_NAMES, DEV_NAMES, buildCleanupPrompt, findSuspects, inspectPids, isOrcaDescendant, parseProposed, pillState } from '../src/cleanup.ts'
+import { AGENT_NAMES, DEV_NAMES, buildCleanupPrompt, cwdPids, findSuspects, inspectPids, isOrcaDescendant, parseProposed, pillState } from '../src/cleanup.ts'
 import { createTracker } from '../src/tracker.ts'
 
 const MB = 1024 ** 2
@@ -223,7 +223,7 @@ test('pillState maps the agent state, liveness and gone count to the pill', () =
   assert.deepEqual(pillState({ agent: 'waiting', alive: true, proposed: null, gone: 1 }), { kind: 'quit', n: 1 })
 })
 
-test('inspectPids picks dev and agent names, reparented processes and tracked hogs only', () => {
+test('inspectPids picks args lookups for dev and agent names, reparented processes and tracked hogs only', () => {
   const clock = { t: 0 }
   const tracker = createTracker(() => clock.t)
   const hog = p(40, 300, 'Renderer', { cpu: 95 })
@@ -241,4 +241,21 @@ test('inspectPids picks dev and agent names, reparented processes and tracked ho
     hog
   ]
   assert.deepEqual(inspectPids(procs, tracker).sort((a, b) => a - b), [10, 11, 12, 13, 15, 40])
+})
+
+test('cwdPids asks for working directories only for dev and agent names or args, never every reparented app', () => {
+  const procs = [
+    p(10, 1, 'node'),
+    p(11, 300, 'claude'),
+    p(13, 1, 'Mail'),
+    p(14, 1, 'Python'),
+    p(15, 300, '2.1.3'),
+    p(16, 1, 'launchd-helper')
+  ]
+  const args = new Map([
+    [14, '/usr/bin/Python -m http.server 8000'],
+    [15, '/opt/homebrew/bin/claude --resume'],
+    [16, '/usr/libexec/helper']
+  ])
+  assert.deepEqual(cwdPids(procs, args).sort((a, b) => a - b), [10, 11, 14, 15])
 })
