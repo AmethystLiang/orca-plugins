@@ -2,6 +2,8 @@ export type RepeatMode = 'off' | 'context' | 'track'
 
 export type Device = { id: string; name: string; type: string; active: boolean; volume: number | null }
 
+export type AlbumRef = { uri: string | null; id: string | null; name: string; year: number | null; total: number | null; number: number | null; openUrl: string | null }
+
 export type NowPlaying = {
   trackId: string | null
   uri: string | null
@@ -17,6 +19,7 @@ export type NowPlaying = {
   liked: boolean | null
   device: Device | null
   contextUri: string | null
+  albumRef: AlbumRef | null
 }
 
 export type Row = {
@@ -26,6 +29,12 @@ export type Row = {
   name: string
   sub: string
   cover: string | null
+  year?: number | null
+  count?: number | null
+  number?: number | null
+  durationMs?: number | null
+  liked?: boolean | null
+  addedAt?: number | null
 }
 
 export type Setup = 'connected' | 'clientId' | 'signIn'
@@ -57,7 +66,7 @@ export type Command =
   | { action: 'volume'; percent: number }
   | { action: 'transfer'; deviceId: string }
   | { action: 'like'; trackId: string; on: boolean }
-  | { action: 'playContext'; contextUri: string; offsetUri?: string }
+  | { action: 'playContext'; contextUri: string; offsetUri?: string; shuffle?: boolean }
   | { action: 'playTrack'; uri: string }
   | { action: 'queue'; uri: string }
   | { action: 'dj' }

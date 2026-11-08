@@ -9,7 +9,7 @@ export const LOCAL_STATE_SCRIPT = [
   'if s is "stopped" then return "stopped"',
   'set t to current track',
   `set d to ASCII character 31`,
-  'return s & d & (id of t) & d & (name of t) & d & (artist of t) & d & (album of t) & d & (artwork url of t) & d & (duration of t) & d & (player position) & d & (shuffling) & d & (repeating) & d & (sound volume)',
+  'return s & d & (id of t) & d & (name of t) & d & (artist of t) & d & (album of t) & d & (artwork url of t) & d & (duration of t) & d & (player position) & d & (shuffling) & d & (repeating) & d & (sound volume) & d & (track number of t)',
   'end tell'
 ]
 
@@ -23,13 +23,14 @@ export function parseLocal(stdout: string): LocalState | null {
   const text = stdout.trim()
   if (text === 'off' || text === 'stopped') return { status: text }
   const parts = text.split(SEP)
-  if (parts.length !== 11) return null
-  const [state, uri, name, artist, album, artwork, duration, position, shuffle, repeat, volume] = parts
+  if (parts.length !== 11 && parts.length !== 12) return null
+  const [state, uri, name, artist, album, artwork, duration, position, shuffle, repeat, volume, trackNumber = ''] = parts
   if (state !== 'playing' && state !== 'paused') return null
   const match = /^spotify:track:([A-Za-z0-9]{1,64})$/.exec(uri)
   const durationMs = Number(duration)
   const positionS = Number(position.replace(',', '.'))
   const volumeN = Number(volume)
+  const numberN = Number(trackNumber)
   return {
     status: state,
     volume: Number.isFinite(volumeN) ? volumeN : null,
@@ -47,7 +48,8 @@ export function parseLocal(stdout: string): LocalState | null {
       repeat: repeat === 'true' ? 'context' : 'off',
       liked: null,
       device: null,
-      contextUri: null
+      contextUri: null,
+      albumRef: album ? { uri: null, id: null, name: album, year: null, total: null, number: Number.isFinite(numberN) && numberN > 0 ? numberN : null, openUrl: null } : null
     }
   }
 }
@@ -80,7 +82,8 @@ export function localCommand(command: Command): string[] | null {
 
 const KEEP_FOCUS_AFTER = ['-e', 'delay 0.4', '-e', 'tell application prior to activate', '-e', 'delay 0.8', '-e', 'tell application prior to activate']
 
-export function localPlay(uri: string, context?: string): string[] {
+export function localPlay(uri: string, context?: string, shuffle = false): string[] {
   const play = context ? `play track "${uri}" in context "${context}"` : `play track "${uri}"`
-  return ['-e', 'set prior to path to frontmost application as text', '-e', `tell application "Spotify" to ${play}`, ...KEEP_FOCUS_AFTER]
+  const before = shuffle ? ['-e', 'tell application "Spotify" to set shuffling to true'] : []
+  return ['-e', 'set prior to path to frontmost application as text', ...before, '-e', `tell application "Spotify" to ${play}`, ...KEEP_FOCUS_AFTER]
 }
