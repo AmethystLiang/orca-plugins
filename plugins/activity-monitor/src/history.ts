@@ -4,7 +4,7 @@ type Sum = { seq: number; count: number; at: number; total: number; cores: numbe
 type Bucket = { key: number; sum: Sum }
 
 const SECOND = 1000
-const RAW_MS = 15 * 60 * SECOND
+export const RAW_MS = 15 * 60 * SECOND
 const MID_MS = 6 * 60 * 60 * SECOND
 const OLD_MS = 24 * 60 * 60 * SECOND
 const MID_WIDTH = 10 * SECOND

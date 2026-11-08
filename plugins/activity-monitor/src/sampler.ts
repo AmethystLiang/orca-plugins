@@ -5,7 +5,7 @@ import type { Battery } from './details.ts'
 import { createLinux } from './linux.ts'
 import { createMac } from './mac.ts'
 import { createWindows } from './windows.ts'
-import { createHistory } from './history.ts'
+import { createHistory, RAW_MS } from './history.ts'
 import { createHealth, culpritOf, topSuspects, type Alert } from './health.ts'
 import { coreLayout, coreLoads, rate, type Core, type CpuTimes, type Memory, type Proc } from './parse.ts'
 
@@ -278,7 +278,7 @@ export function createSampler(options: SamplerOptions = {}) {
     const [list, extra] = await Promise.all([wantList ? procs.ready() : null, input.details ? details.ready() : null])
     const sample = { ...latest, counts: counts(list, extra) }
     const span = Number(input.span) || 0
-    const windowed = span * 1000 / interval > HISTORY
+    const windowed = span * 1000 > RAW_MS || span * 1000 / interval > HISTORY
     const since = input.boot === boot ? Number(input.since) || 0 : 0
     const points = windowed ? history.window(span, WINDOW_POINTS) : history.since(since).slice(-HISTORY)
     return { boot, sample, health: health.snapshot(), procs: input.procs ? merge(list, extra) : null, history: points, windowed }

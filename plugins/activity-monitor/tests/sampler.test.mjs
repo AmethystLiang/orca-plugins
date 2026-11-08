@@ -153,4 +153,6 @@ test('read returns a windowed history only when the span outgrows the raw point 
   assert.ok(long.history.length <= 600)
   const fast = await sampler.read({ interval: 100, span: 300 })
   assert.equal(fast.windowed, true)
+  const slow = await sampler.read({ interval: 5000, span: 3600 })
+  assert.equal(slow.windowed, true)
 })
