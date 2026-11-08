@@ -16,6 +16,7 @@ import {
 import { linuxBattery, parseDiskstatsOps, parsePasswd, parseProcIo, parseProcNetDevPackets, parseStatusUid, type Extra } from './details.ts'
 
 const SMI = ['--query-gpu=utilization.gpu,name', '--format=csv,noheader,nounits']
+const NVIDIA_DISCOVERY_EVERY = 60_000
 
 export function createLinux(d: Deps, root = '', home = os.homedir()): Provider {
   let tick = 100
@@ -25,6 +26,9 @@ export function createLinux(d: Deps, root = '', home = os.homedir()): Provider {
   let previousAt = 0
   let gpuMode: 'nvidia' | 'amd' | 'none' | null = null
   let amdCards: string[] = []
+  let nvidiaPaths: string[] | null = null
+  let nvidiaDevices = new Set<string>()
+  let nvidiaPathsAt = 0
 
   function tune() {
     if (!tuned) {
@@ -36,18 +40,31 @@ export function createLinux(d: Deps, root = '', home = os.homedir()): Provider {
     return tuned
   }
 
-  async function asleep(paths: string[]): Promise<boolean> {
+  async function asleep(paths: string[]): Promise<boolean | null> {
     const states = await Promise.all(paths.map((path) => d.read(path)))
+    if (states.some((s) => !s.trim())) return null
     return states.length > 0 && states.every((s) => s.trim() === 'suspended')
   }
 
   async function nvidiaPower(): Promise<string[]> {
     const devices = await d.list(root + '/sys/bus/pci/devices')
+    // Check topology every poll, but reuse identities while the device set is stable.
+    if (nvidiaPaths && Date.now() - nvidiaPathsAt < NVIDIA_DISCOVERY_EVERY &&
+      devices.length === nvidiaDevices.size && devices.every((dev) => nvidiaDevices.has(dev))) return nvidiaPaths
+    nvidiaPaths = null
     const vendors = await Promise.all(devices.map((dev) => d.read(root + '/sys/bus/pci/devices/' + dev + '/vendor')))
     const classes = await Promise.all(devices.map((dev) => d.read(root + '/sys/bus/pci/devices/' + dev + '/class')))
-    return devices
+    // An incomplete scan cannot establish that every NVIDIA GPU is asleep.
+    if (vendors.some((v) => !v.trim()) || classes.some((c) => !c.trim())) return []
+    const paths = devices
       .filter((_, i) => vendors[i].trim() === '0x10de' && classes[i].trim().startsWith('0x03'))
       .map((dev) => root + '/sys/bus/pci/devices/' + dev + '/power/runtime_status')
+    if (paths.length) {
+      nvidiaPaths = paths
+      nvidiaDevices = new Set(devices)
+      nvidiaPathsAt = Date.now()
+    }
+    return paths
   }
 
   async function readGpu() {
@@ -64,7 +81,14 @@ export function createLinux(d: Deps, root = '', home = os.homedir()): Provider {
       gpuMode = amdCards.length ? 'amd' : 'none'
     }
     if (gpuMode === 'nvidia') {
-      if (await asleep(await nvidiaPower())) return { utilization: 0, model: 'NVIDIA GPU (asleep)' }
+      let sleeping = await asleep(await nvidiaPower())
+      if (sleeping === null) {
+        // A removed device should not wake the remaining suspended GPUs.
+        nvidiaPaths = null
+        sleeping = await asleep(await nvidiaPower())
+        if (sleeping === null) nvidiaPaths = null
+      }
+      if (sleeping) return { utilization: 0, model: 'NVIDIA GPU (asleep)' }
       return parseNvidiaSmi((await d.run('nvidia-smi', SMI)) ?? '')
     }
     if (gpuMode === 'amd') {
