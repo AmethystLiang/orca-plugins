@@ -29,7 +29,7 @@ The badge keeps the worker running while the sidebar is closed, so warnings stil
 The cleanup session gets a list of processes that look stale or runaway. The thresholds are conservative on purpose:
 
 - **Orphaned dev process**: `node`, `bun`, `deno`, `vite`, `tsc`, `esbuild`, `webpack`, `next`, `turbo`, `nodemon`, `tsx` or `python`, or a command line running `vite`, `next dev`, `webpack`, `tsc --watch` or `http.server`, whose parent is gone (parent PID 1) or whose working directory no longer exists.
-- **Orphaned agent**: `claude`, `codex`, `grok`, `gemini`, `cursor-agent`, `aider` or `opencode` with a gone parent or working directory. An agent that still runs under Orca is never flagged, however long it has been idle.
+- **Orphaned agent**: `claude`, `codex`, `grok`, `gemini`, `cursor-agent`, `aider` or `opencode` (also when run through `node`) with a gone parent or working directory. An agent that still runs under Orca is never flagged, however long it has been idle.
 - **CPU hog**: 80% of a core or more, averaged over 5 minutes.
 - **Memory leak**: resident memory up at least 500 MB and at least 50% over 10 minutes.
 

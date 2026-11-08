@@ -84,6 +84,15 @@ test('a claude under Orca is never a suspect, even idle for hours or with a gone
   assert.deepEqual(out, [])
 })
 
+test('an agent CLI hosted by node under Orca is never a suspect', () => {
+  const tracker = busyTracker([{ pid: 803, cpu: 99, start: A, name: 'node', grow: true }])
+  const procs = [...ORCA, p(803, 600, 'node', { cpu: 99 }), p(804, 600, 'node')]
+  const args = new Map([[803, 'node /opt/homebrew/bin/gemini'], [804, 'node /usr/local/lib/node_modules/@openai/codex/bin/codex.js --yolo']])
+  const cwds = new Map([[803, '/gone'], [804, '/gone']])
+  assert.deepEqual(run(procs, { tracker, args, cwds, cwdExists: () => false }), [])
+  assert.deepEqual(run([...ORCA, p(805, 600, 'node')], { args: new Map([[805, 'node server.js']]), cwds: new Map([[805, '/gone']]), cwdExists: () => false }).map((s) => s.pid), [805])
+})
+
 test('an agent with no parent pid is skipped because its ancestry is unknown', () => {
   const tracker = busyTracker([{ pid: 802, cpu: 99, start: A, name: 'claude.exe', mem: GB }])
   const out = run([{ pid: 802, name: 'claude.exe', cpu: 99, mem: GB, start: A }], { tracker })
@@ -163,6 +172,7 @@ test('the prompt fences each suspect and asks for approval before quitting', () 
   assert.match(text, /Proposed: N/)
   assert.match(text, /wait for my approval/)
   assert.match(text, /Never quit Orca/)
+  assert.match(text, /Never propose agent CLIs .* still running inside Orca terminals, this cleanup session, or the Activity Monitor worker; name each process you want to quit\./)
   assert.match(text, /SIGTERM/)
   assert.match(text, /taskkill/)
   assert.match(text, /force/i)
@@ -188,6 +198,7 @@ test('an empty list asks for a quick look and keeps the safety rules', () => {
   assert.match(text, /quick look/)
   assert.match(text, /wait for my approval/)
   assert.match(text, /Never quit Orca/)
+  assert.match(text, /Never propose agent CLIs .* still running inside Orca terminals, this cleanup session, or the Activity Monitor worker; name each process you want to quit\./)
   assert.match(text, /Proposed: N/)
   assert.match(text, /SIGTERM/)
   assert.match(text, /taskkill/)

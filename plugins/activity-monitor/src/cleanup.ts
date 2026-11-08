@@ -34,6 +34,7 @@ export type SuspectInput = {
 export const DEV_NAMES = /^(node|bun|deno|vite|tsc|esbuild|webpack|next|turbo|nodemon|tsx|python3?)$/
 export const AGENT_NAMES = /^(claude|codex|grok|gemini|cursor-agent|aider|opencode)$/
 const DEV_ARGS = /(vite|next dev|webpack|tsc --watch|http\.server)/
+const AGENT_ARGS = /(^|[\/\\\s])(claude|codex|grok|gemini|cursor-agent|aider|opencode)(\.js|\.exe)?(\s|$)/
 
 const HOG_CPU = 80
 const LEAK_BYTES = 500 * 1024 ** 2
@@ -88,7 +89,7 @@ export function findSuspects(input: SuspectInput): CleanupSuspect[] {
     const bare = bareName(p.name)
     const args = input.args.get(p.pid) ?? null
     const cwd = input.cwds.get(p.pid) ?? null
-    const agent = AGENT_NAMES.test(bare)
+    const agent = AGENT_NAMES.test(bare) || (args !== null && AGENT_ARGS.test(args))
     if (agent && (p.ppid === undefined || isOrcaDescendant(p.pid, parents, (pid) => orcaPids.has(pid)))) continue
     const dev = !agent && (DEV_NAMES.test(bare) || (args !== null && DEV_ARGS.test(args)))
     const orphan = p.ppid === 1 || cwdGone(cwd, input.cwdExists)
@@ -149,6 +150,7 @@ const RULES =
   'Rules: wait for my approval before quitting anything. ' +
   'Quit politely first (SIGTERM, for example kill PID, or plain taskkill /PID PID on Windows) and force it (kill -9 or taskkill /F) only if that fails and I agree. ' +
   'Never quit Orca or any of its helper or renderer processes, system processes, or this cleanup session and its shell. ' +
+  'Never propose agent CLIs (claude, codex, grok, gemini, cursor-agent, aider, opencode) that are still running inside Orca terminals, this cleanup session, or the Activity Monitor worker; name each process you want to quit. ' +
   'End your proposal with a line Proposed: N, where N is the number of processes you propose to quit.'
 
 export function buildCleanupPrompt(suspects: CleanupSuspect[], platform: string): string {
