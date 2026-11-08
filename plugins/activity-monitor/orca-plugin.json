@@ -54,6 +54,9 @@
     },
     {
       "kind": "terminal:read"
+    },
+    {
+      "kind": "storage:own"
     }
   ],
   "cover": {

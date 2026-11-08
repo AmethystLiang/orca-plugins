@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { AGENT_NAMES, DEV_NAMES, buildCleanupPrompt, findSuspects, isOrcaDescendant } from '../src/cleanup.ts'
+import { AGENT_NAMES, DEV_NAMES, buildCleanupPrompt, findSuspects, inspectPids, isOrcaDescendant, parseProposed, pillState } from '../src/cleanup.ts'
 import { createTracker } from '../src/tracker.ts'
 
 const MB = 1024 ** 2
@@ -202,4 +202,43 @@ test('an empty list asks for a quick look and keeps the safety rules', () => {
   assert.match(text, /Proposed: N/)
   assert.match(text, /SIGTERM/)
   assert.match(text, /taskkill/)
+})
+
+test('parseProposed reads the last Proposed line and returns null without one', () => {
+  assert.equal(parseProposed(['checking', 'Proposed: 4']), 4)
+  assert.equal(parseProposed(['Proposed: 2', 'more text', '  Proposed: 7  ', 'done']), 7)
+  assert.equal(parseProposed(['nothing here', 'Proposed: none']), null)
+  assert.equal(parseProposed([]), null)
+})
+
+test('pillState maps the agent state, liveness and gone count to the pill', () => {
+  assert.deepEqual(pillState({ agent: 'working', alive: false, proposed: 3, gone: 1 }), { kind: 'rest' })
+  assert.deepEqual(pillState({ agent: null, alive: true, proposed: null, gone: 0 }), { kind: 'working' })
+  assert.deepEqual(pillState({ agent: 'working', alive: true, proposed: 3, gone: 0 }), { kind: 'working' })
+  assert.deepEqual(pillState({ agent: 'working', alive: true, proposed: 3, gone: 2 }), { kind: 'working' })
+  assert.deepEqual(pillState({ agent: 'waiting', alive: true, proposed: 3, gone: 0 }), { kind: 'review', n: 3 })
+  assert.deepEqual(pillState({ agent: 'blocked', alive: true, proposed: null, gone: 0 }), { kind: 'review', n: null })
+  assert.deepEqual(pillState({ agent: 'done', alive: true, proposed: 5, gone: 0 }), { kind: 'review', n: 5 })
+  assert.deepEqual(pillState({ agent: 'done', alive: true, proposed: 5, gone: 2 }), { kind: 'quit', n: 2 })
+  assert.deepEqual(pillState({ agent: 'waiting', alive: true, proposed: null, gone: 1 }), { kind: 'quit', n: 1 })
+})
+
+test('inspectPids picks dev and agent names, reparented processes and tracked hogs only', () => {
+  const clock = { t: 0 }
+  const tracker = createTracker(() => clock.t)
+  const hog = p(40, 300, 'Renderer', { cpu: 95 })
+  for (let i = 0; i <= 20; i++) {
+    clock.t = i * 15_000
+    tracker.add([hog])
+  }
+  const procs = [
+    p(10, 300, 'node'),
+    p(11, 300, 'claude'),
+    p(12, 300, 'codex.exe'),
+    p(13, 1, 'Mail'),
+    p(14, 300, 'Safari'),
+    p(15, 300, '/usr/bin/python3'),
+    hog
+  ]
+  assert.deepEqual(inspectPids(procs, tracker).sort((a, b) => a - b), [10, 11, 12, 13, 15, 40])
 })

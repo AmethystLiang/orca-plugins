@@ -156,3 +156,22 @@ test('read returns a windowed history only when the span outgrows the raw point 
   const slow = await sampler.read({ interval: 5000, span: 3600 })
   assert.equal(slow.windowed, true)
 })
+
+test('listProcs, inspect and guard reach the provider data for the cleanup', async () => {
+  const list = [{ pid: 7, ppid: 1, name: 'node', cpu: 1, mem: 10, start: START }]
+  const asked = []
+  const provider = stubProvider({
+    procs: async () => list,
+    cwds: async (pids) => { asked.push(['cwds', pids]); return new Map([[7, '/tmp']]) },
+    args: async (pids) => { asked.push(['args', pids]); return new Map([[7, 'node server.js']]) }
+  })
+  const sampler = createSampler({ provider, selfPids: [42] })
+  assert.deepEqual(await sampler.listProcs(), list)
+  const seen = await sampler.inspect([7])
+  assert.equal(seen.cwds.get(7), '/tmp')
+  assert.equal(seen.args.get(7), 'node server.js')
+  assert.deepEqual(asked, [['cwds', [7]], ['args', [7]]])
+  const guard = sampler.guard()
+  assert.deepEqual(guard.selfPids, [42])
+  assert.equal(guard.protectedNames, provider.protectedNames)
+})

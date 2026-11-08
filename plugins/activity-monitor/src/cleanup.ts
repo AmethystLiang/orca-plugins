@@ -76,6 +76,20 @@ function trendOf(growth: { bytes: number } | null): string | null {
   return (growth.bytes > 0 ? '+' : '-') + bytes(Math.abs(growth.bytes)) + ' in 10 min'
 }
 
+function hogOrLeak(stats: ReturnType<Tracker['stats']>): boolean {
+  const growth = stats.memGrowth10m
+  return (stats.cpuAvg5m !== null && stats.cpuAvg5m >= HOG_CPU) || (growth !== null && growth.bytes >= LEAK_BYTES && growth.ratio >= LEAK_RATIO)
+}
+
+export function inspectPids(procs: Proc[], tracker: Tracker): number[] {
+  const out: number[] = []
+  for (const p of procs) {
+    const bare = bareName(p.name)
+    if (DEV_NAMES.test(bare) || AGENT_NAMES.test(bare) || p.ppid === 1 || hogOrLeak(tracker.stats(p.pid, p.start))) out.push(p.pid)
+  }
+  return out
+}
+
 export function findSuspects(input: SuspectInput): CleanupSuspect[] {
   const parents = new Map<number, number>()
   const orcaPids = new Set<number>()
@@ -171,4 +185,25 @@ export function buildCleanupPrompt(suspects: CleanupSuspect[], platform: string)
     'Verify each one is really stale or runaway, then propose a kill list with a one-line reason per PID. ' +
     RULES
   )
+}
+
+export type AgentState = 'working' | 'blocked' | 'waiting' | 'done'
+
+export type PillState = { kind: 'rest' } | { kind: 'working' } | { kind: 'review'; n: number | null } | { kind: 'quit'; n: number }
+
+const PROPOSED = /^\s*Proposed:\s*(\d+)\s*$/
+
+export function parseProposed(lines: string[]): number | null {
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const match = PROPOSED.exec(lines[i])
+    if (match) return Number(match[1])
+  }
+  return null
+}
+
+export function pillState(s: { agent: AgentState | null; alive: boolean; proposed: number | null; gone: number }): PillState {
+  if (!s.alive) return { kind: 'rest' }
+  if (s.agent === null || s.agent === 'working') return { kind: 'working' }
+  if (s.gone > 0) return { kind: 'quit', n: s.gone }
+  return { kind: 'review', n: s.proposed }
 }

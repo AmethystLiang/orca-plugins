@@ -297,6 +297,22 @@ export function createSampler(options: SamplerOptions = {}) {
     return { by, word: snap.word, cause: snap.cause, items: topSuspects(list, { selfPids, protectedNames: provider.protectedNames }, by, SUSPECTS) }
   }
 
+  function listProcs(): Promise<Proc[] | null> {
+    return provider.procs().catch(() => null)
+  }
+
+  async function inspect(pids: number[]): Promise<{ cwds: Map<number, string | null>; args: Map<number, string> }> {
+    const [cwds, args] = await Promise.all([
+      provider.cwds(pids).catch(() => new Map<number, string | null>()),
+      provider.args(pids).catch(() => new Map<number, string>())
+    ])
+    return { cwds, args }
+  }
+
+  function guard(): { selfPids: number[]; protectedNames: RegExp } {
+    return { selfPids, protectedNames: provider.protectedNames }
+  }
+
   function setRecording(on: boolean): void {
     recording = on
   }
@@ -317,5 +333,5 @@ export function createSampler(options: SamplerOptions = {}) {
     return provider.quit(pid, force)
   }
 
-  return { read, quit, pulse, setRecording, suspects, onAlert, health: () => health.snapshot() }
+  return { read, quit, pulse, setRecording, suspects, onAlert, listProcs, inspect, guard, health: () => health.snapshot() }
 }
