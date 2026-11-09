@@ -920,7 +920,7 @@
       view.cleanupErr = ''
       render()
       api.plugin.request('cleanup.start', {}, { timeoutMs: 60000 }).then(function (r) {
-        if (!r || !r.ok) cleanupError(r && r.reason)
+        if (!r || !r.ok) { cleanupError(r && r.reason); cleanupRead() }
         else if (my === cleanupSeq) cleanupApply(r)
       }, function (e) {
         cleanupError(e && (e.message || e.code))
@@ -1517,7 +1517,7 @@
     }, true)
   })
   document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape' && pop.el) popClose() })
-  window.addEventListener('resize', popPlace)
+  window.addEventListener('resize', function () { popPlace(); fitFooter() })
   root.addEventListener('pointerdown', hideTip)
   root.addEventListener('wheel', hideTip, { passive: true })
   root.addEventListener('pointerout', function (ev) {

@@ -412,6 +412,18 @@ test('mac args read ps output', async () => {
   assert.equal((await mac.args([])).size, 0)
 })
 
+test('mac args keep what a batched ps printed when a pid vanished and ps exits non-zero', async () => {
+  const seen = []
+  const deps = fakeDeps({}, {})
+  deps.run = async (command, args, options) => {
+    seen.push({ args: args.join(' '), anyExit: options?.anyExit === true })
+    return options?.anyExit ? '  501 node /app/server.js\n' : null
+  }
+  const mac = createMac(deps)
+  assert.deepEqual(await mac.args([501, 9]), new Map([[501, 'node /app/server.js']]))
+  assert.deepEqual(seen, [{ args: '-o pid=,args= -p 501,9', anyExit: true }])
+})
+
 test('Linux cwds read the proc cwd link and args read the NUL separated cmdline', async () => {
   const linux = createLinux(fakeDeps(linuxFiles({ '/proc/42/cmdline': 'node\x00/app/server.js\x00--port\x003000\x00' }), GETCONF, { '/proc/42/cwd': '/home/me/app' }))
   assert.deepEqual(await linux.cwds([42, 1]), new Map([[42, '/home/me/app'], [1, null]]))

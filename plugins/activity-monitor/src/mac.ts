@@ -148,7 +148,7 @@ export function createMac(d: Deps): Provider {
     },
     async args(pids) {
       if (!pids.length) return new Map()
-      return parsePsArgs((await d.run('ps', ['-o', 'pid=,args=', '-p', pids.join(',')])) ?? '')
+      return parsePsArgs((await d.run('ps', ['-o', 'pid=,args=', '-p', pids.join(',')], { anyExit: true })) ?? '')
     },
     quit: signalQuit
   }
