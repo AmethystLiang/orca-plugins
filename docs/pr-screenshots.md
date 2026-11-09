@@ -29,7 +29,9 @@ How the body is read:
 
 ## How it runs
 
-`.github/workflows/pr-body.yml` runs `scripts/check_pr_screenshots.sh <pr>` when a PR is opened, edited, gets new commits, is reopened, or is marked ready for review. Because `edited` is included, fixing the body re-runs the check without a push. Draft PRs are skipped. The check is advisory, not a required status check.
+`.github/workflows/pr-body.yml` runs `scripts/check_pr_screenshots.sh <pr>` when a PR is opened, edited, gets new commits, is reopened, or is marked ready for review. Because `edited` is included, fixing the body re-runs the check without a push. Draft PRs are skipped.
+
+**The check is required.** A ruleset on `main` makes the `PR screenshots` status check required, so a UI PR can't merge until its body has both proofs or both n/a lines. The check re-runs when you edit the body, so you don't need a new push to clear it.
 
 To check a body locally before opening the PR:
 

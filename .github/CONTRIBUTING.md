@@ -51,7 +51,7 @@ Each PR follows [`.github/pull_request_template.md`](./pull_request_template.md)
 - If you are an outside contributor, link the issue your PR addresses. PRs from outside contributors without a linked issue are ignored.
 - Open with an ELI5 of the change, a plain-language paragraph. The PR title is the one-liner.
 - Explain what changed and why, and keep to a single topic.
-- For any UI or interaction change, add **before and after** screenshots and a GIF walkthrough under `## Screenshots`. The PR Body check enforces this; see [`docs/pr-screenshots.md`](../docs/pr-screenshots.md). If there is no visual or interaction change, write the `n/a` lines with a reason.
+- For any UI or interaction change, before and after screenshots and a GIF walkthrough under `## Screenshots` are **required**. The `PR screenshots` status check enforces this, and the PR can't merge until it passes; see [`docs/pr-screenshots.md`](../docs/pr-screenshots.md). Only a change with truly nothing to show may use the `n/a` lines, each with a reason.
 - **Never commit screenshots, GIFs, or videos to the PR's files.** Attach them with the `gh image` extension or drag and drop them into the PR description.
 - Include tests when behavior changes or bug fixes warrant them.
 - Include a brief code review summary from your AI coding agent. It must explicitly cover cross-platform compatibility, SSH/remote/local compatibility, agent and integration compatibility, performance, UI quality when applicable, and security, including any new capabilities.

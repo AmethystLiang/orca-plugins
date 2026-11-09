@@ -20,9 +20,10 @@ Fixes #
 ## Screenshots
 
 <!--
-Visual proof. REQUIRED when the PR changes a plugin's UI: non-test files under
+Visual proof: screenshots AND a GIF are REQUIRED when the PR changes a plugin's UI: non-test files under
 plugins/*/panel/, plugins/*/src/panel*, plugins/*/themes/, plugins/*/terminal/
-or plugins/*/media/. Checked by the PR Body workflow (see docs/pr-screenshots.md).
+or plugins/*/media/. Enforced by the required PR screenshots check: the PR can't
+merge without it (see docs/pr-screenshots.md).
 
 Attach a BEFORE and AFTER image here. NEVER commit attachments to the PR's
 files: use the `gh image` extension or drag and drop into this description.
