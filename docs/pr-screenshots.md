@@ -41,8 +41,11 @@ scripts/check_pr_screenshots.sh --body body.md --files changed-files.txt
 
 ## Making the proofs
 
-- **Stills:** capture Before from `main` and After from your branch with a headless harness (Playwright loading the panel with a fake `window.orca`). Commit them under `docs/design/<plugin>/` and link them with `?raw=true` URLs.
-- **GIF:** record frames of the changed flow, then encode them with ffmpeg, for example: `ffmpeg -framerate 8 -i f%03d.png -vf "split[a][b];[a]palettegen[p];[b][p]paletteuse" demo.gif`.
+- **Stills:** capture Before from `main` and After from your branch, for example with a headless harness (Playwright loading the panel with a fake `window.orca`).
+- **GIF:** record frames of the changed flow and encode them with ffmpeg, for example `ffmpeg -framerate 8 -i f%03d.png -vf "split[a][b];[a]palettegen[p];[b][p]paletteuse" demo.gif`.
+- **Attach, never commit.** Upload images and GIFs with the `gh image` extension, or drag and drop them into the PR description. They become `github.com/user-attachments/...` links, which the check accepts. Don't add them to the PR's files. Design-round mockup pages may still live in `docs/design/`.
 - Capture locally only.
 
-Ported from rhettworks' `scripts/check_pr_screenshots.sh` and `.github/workflows/pr-body.yml`. Its upload helpers (`pr_screenshots.sh`, `pr_video.sh`) were left out; this repo commits images under `docs/design/` instead.
+See [`.github/CONTRIBUTING.md`](../.github/CONTRIBUTING.md) for the rest of the PR requirements.
+
+Ported from rhettworks' `scripts/check_pr_screenshots.sh` and `.github/workflows/pr-body.yml`. Its upload helpers (`pr_screenshots.sh`, `pr_video.sh`) were left out; use `gh image` or drag and drop instead.

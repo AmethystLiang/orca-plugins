@@ -146,9 +146,9 @@ if [ "$shots_ok" -ne 1 ]; then
     echo
     echo "Fix it one of two ways:"
     echo
-    echo "  1. Capture before (from main) and after (this branch) stills of the panel,"
-    echo "     commit them under docs/design/<plugin>/, and add them under a"
-    echo "     '## Screenshots' heading in the PR body."
+    echo "  1. Capture before (from main) and after (this branch) stills of the panel"
+    echo "     and attach them under a '## Screenshots' heading in the PR body with"
+    echo "     the gh image extension or drag and drop. Never commit them."
     echo
     echo "  2. If there is truly nothing to screenshot (e.g. a copy-only"
     echo "     change), add a line to the body:"
