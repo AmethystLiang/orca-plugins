@@ -172,6 +172,61 @@ test('cleanup.state follows the agent from working to review, and to rest when t
   await worker.deactivate()
 })
 
+function liveCli(show) {
+  fakeSystem([ORPHAN])
+  const shows = []
+  main.seams.run = async (command, args, options) => {
+    if (args[1] !== 'show') return ''
+    shows.push({ command, args: args.join(' '), anyExit: options?.anyExit === true })
+    return show(command)
+  }
+  return shows
+}
+
+const shown = (terminal) => JSON.stringify({ id: 'x', ok: true, result: { terminal: { handle: 'term_1', ...terminal } } })
+
+test('a closed cleanup terminal ends the session even though terminal.read still answers', async () => {
+  let terminal = { connected: true, writable: true, orphaned: false }
+  const shows = liveCli(() => shown(terminal))
+  const worker = await mountWorker(main, { host: cleanupHost({ 'terminal.read': { lines: [], truncated: false } }) })
+  await started(worker)
+  assert.deepEqual((await worker.request('cleanup.state')).state, { kind: 'working' })
+  assert.deepEqual(shows.at(-1), { command: 'orca', args: 'terminal show --terminal term_1 --json', anyExit: true })
+  terminal = { connected: false, writable: false, orphaned: true }
+  assert.deepEqual(await worker.request('cleanup.state'), { state: { kind: 'rest' }, count: 0 })
+  await worker.deactivate()
+})
+
+test('a stale terminal handle ends the session', async () => {
+  let stale = false
+  liveCli(() => (stale ? JSON.stringify({ id: 'x', ok: false, error: { code: 'terminal_handle_stale', message: 'terminal_handle_stale' } }) : shown({ connected: true, writable: true })))
+  const worker = await mountWorker(main, { host: cleanupHost({ 'terminal.read': { lines: [], truncated: false } }) })
+  await started(worker)
+  assert.deepEqual((await worker.request('cleanup.state')).state, { kind: 'working' })
+  stale = true
+  assert.deepEqual(await worker.request('cleanup.state'), { state: { kind: 'rest' }, count: 0 })
+  await worker.deactivate()
+})
+
+test('when the Orca CLI cannot run, liveness falls back to terminal.read', async () => {
+  let alive = true
+  const shows = liveCli(() => null)
+  const worker = await mountWorker(main, {
+    host: cleanupHost({
+      'terminal.read': () => {
+        if (!alive) throw hostError('invalid_params', 'no such terminal')
+        return { lines: ['Proposed: 2'], truncated: false }
+      }
+    })
+  })
+  await started(worker)
+  assert.deepEqual((await worker.request('cleanup.state')).state, { kind: 'working' })
+  assert.ok(shows.length >= 1)
+  alive = false
+  assert.deepEqual(await worker.request('cleanup.state'), { state: { kind: 'rest' }, count: 0 })
+  await worker.deactivate()
+})
+
 test('a suspect that disappears turns the pill to quit, and opening it returns to rest', async () => {
   const procs = [ORPHAN]
   const runs = fakeCli(procs)

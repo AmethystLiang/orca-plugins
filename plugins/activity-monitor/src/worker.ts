@@ -63,6 +63,30 @@ async function orcaCli(args: string[]): Promise<boolean> {
   return false
 }
 
+async function cliJson(args: string[]): Promise<unknown> {
+  let out = await seams.run('orca', args, { anyExit: true })
+  if (out === null && process.platform === 'darwin') out = await seams.run(APP_CLI, args, { anyExit: true })
+  if (out === null) return null
+  try {
+    return JSON.parse(out)
+  } catch {
+    return null
+  }
+}
+
+async function terminalAlive(terminalId: string): Promise<boolean | null> {
+  const r = (await cliJson(['terminal', 'show', '--terminal', terminalId, '--json']).catch(() => null)) as {
+    ok?: boolean
+    error?: { code?: string }
+    result?: { terminal?: { connected?: boolean; writable?: boolean } }
+  } | null
+  if (!r || typeof r !== 'object') return null
+  if (r.ok === false) return r.error?.code === 'terminal_handle_stale' ? false : null
+  const t = r.result?.terminal
+  if (r.ok !== true || !t || typeof t !== 'object') return null
+  return t.connected !== false && t.writable !== false
+}
+
 export default function activate(orca: OrcaWorkerApi): void {
   const sampler = seams.sampler()
   const host = (orca as unknown as { host?: { call?: HostCall } }).host
@@ -160,6 +184,10 @@ export default function activate(orca: OrcaWorkerApi): void {
   async function view(): Promise<View> {
     const s = session
     if (!s) return REST
+    if ((await terminalAlive(s.terminalId)) === false) {
+      if (session === s) session = null
+      return REST
+    }
     const read = (await call('terminal.read', { terminalId: s.terminalId, maxLines: READ_LINES })) as { lines?: string[] } | null
     if (!read || !Array.isArray(read.lines)) {
       if (session === s) session = null
