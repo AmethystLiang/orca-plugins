@@ -46,12 +46,14 @@
     var n = o.n
     var a = arr.slice(-(n + 2))
     var ax = o.axes || null
-    if (ax) {
-      g.strokeStyle = o.grid
+    if (o.grid) {
+      g.strokeStyle = o.rule
       g.lineWidth = 1
       g.setLineDash([2, 3])
-      var mid = Math.round(h / 2) + 0.5
-      g.beginPath(); g.moveTo(0, mid); g.lineTo(w, mid); g.stroke()
+      ;(o.big ? [0.25, 0.5, 0.75] : [0.5]).forEach(function (f) {
+        var y = Math.round(h * f) + 0.5
+        g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke()
+      })
       g.setLineDash([])
     }
     if (a.length < 2) { labels(); return }
@@ -61,15 +63,15 @@
     var pts = a.map(function (v, i) {
       return [w + (i - (a.length - 1)) * dx + (1 - e) * dx, pad + (h - 2 * pad) * (1 - F.clamp(v, 0, 100) / 100)]
     })
-    if (o.big && !ax) {
-      g.strokeStyle = o.grid
-      g.globalAlpha = 0.6
-      g.lineWidth = 1
-      ;[0.25, 0.5, 0.75].forEach(function (f) {
-        var y = Math.round(h * f) + 0.5
-        g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke()
+    if (o.line === 'bars') {
+      var gap = dx >= 3 ? Math.max(1, dx * 0.3) : 0
+      a.forEach(function (v, i) {
+        var f = F.clamp(v, 0, 100) / 100
+        g.fillStyle = o.heat ? F.heat(f) : rgba(o.color, 0.35 + 0.65 * f)
+        g.fillRect(pts[i][0] - dx / 2 + gap / 2, pts[i][1], Math.max(0.5, dx - gap), h - pts[i][1])
       })
-      g.globalAlpha = 1
+      labels()
+      return
     }
     var stroke, fillTop, fillBot
     if (o.heat) {
@@ -88,12 +90,14 @@
       }
       g.lineTo(pts[pts.length - 1][0], pts[pts.length - 1][1])
     }
-    var fill = g.createLinearGradient(0, 0, 0, h)
-    fill.addColorStop(0, fillTop); fill.addColorStop(1, fillBot)
-    g.beginPath(); path(); g.lineTo(pts[pts.length - 1][0], h); g.lineTo(pts[0][0], h); g.closePath()
-    g.fillStyle = fill; g.fill()
+    if (o.line !== 'line') {
+      var fill = g.createLinearGradient(0, 0, 0, h)
+      fill.addColorStop(0, fillTop); fill.addColorStop(1, fillBot)
+      g.beginPath(); path(); g.lineTo(pts[pts.length - 1][0], h); g.lineTo(pts[0][0], h); g.closePath()
+      g.fillStyle = fill; g.fill()
+    }
     g.beginPath(); path()
-    g.lineWidth = o.big ? 1.6 : 1.25; g.lineJoin = 'round'; g.lineCap = 'round'; g.strokeStyle = stroke; g.stroke()
+    g.lineWidth = o.big ? (o.line === 'line' ? 1.8 : 1.6) : 1.25; g.lineJoin = 'round'; g.lineCap = 'round'; g.strokeStyle = stroke; g.stroke()
     if (o.big) {
       var lp = pts[pts.length - 1]
       var pv = pts[pts.length - 2]
@@ -106,10 +110,12 @@
     }
     labels()
     function labels() {
-      if (!ax || !ax.top || h < 40 || w < 90) return
+      if (!ax || h < 40 || w < 90) return
+      var list = [[ax.span, w - 2, h - 6, 'right']]
+      if (o.grid) list.push([ax.top, 2, 6, 'left'], [ax.mid, 2, Math.round(h / 2), 'left'])
       g.font = (9 * (o.ts || 1)).toFixed(1) + 'px ui-monospace, "SF Mono", Menlo, monospace'
       g.textBaseline = 'middle'
-      ;[[ax.top, 2, 6, 'left'], [ax.mid, 2, Math.round(h / 2), 'left'], [ax.span, w - 2, h - 6, 'right']].forEach(function (l) {
+      list.forEach(function (l) {
         if (!l[0]) return
         g.textAlign = l[3]
         var tw = g.measureText(l[0]).width
