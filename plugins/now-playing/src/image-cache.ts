@@ -1,9 +1,10 @@
-// Bound retained artwork by both count and string size. A character can occupy
-// two bytes, so the default data/URL budget uses at most about 8 MiB of strings.
 export function createImageCache(maxEntries = 160, maxChars = 4 * 1024 * 1024) {
   const entries = new Map<string, string>()
   let chars = 0
   return {
+    has(url: string): boolean {
+      return entries.has(url)
+    },
     get(url: string): string | undefined {
       const data = entries.get(url)
       if (data !== undefined) {
@@ -19,8 +20,6 @@ export function createImageCache(maxEntries = 160, maxChars = 4 * 1024 * 1024) {
         entries.delete(url)
       }
       const size = url.length + data.length
-      // An oversized image can still be displayed by its caller without being
-      // retained here or evicting every useful small image.
       if (maxEntries <= 0 || size > maxChars) return
       while (entries.size >= maxEntries || chars + size > maxChars) {
         const [key, value] = entries.entries().next().value!
