@@ -226,6 +226,8 @@ body {
 .ctime { display: flex; justify-content: space-between; font: calc(9px * var(--ts, 1)) var(--mono); color: var(--muted); flex: none; margin: 0 36px 0 24px; }
 .ctime.abs { display: block; position: relative; height: calc(12px * var(--ts, 1)); }
 .ctime.abs span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
+.ctime.abs span.l { transform: none; }
+.ctime.abs span.r { transform: translateX(-100%); }
 .sr .seg .lv { display: block; width: 26px; height: 12px; }
 .sr .seg .lv svg { display: block; width: 26px; height: 12px; }
 .hq { max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

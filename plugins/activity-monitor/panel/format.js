@@ -64,7 +64,7 @@
     var tail = arr.slice(-(window || 120))
     var max = 1
     for (var i = 0; i < tail.length; i++) if (tail[i] > max) max = tail[i]
-    return arr.map(function (v) { return (v / max) * 100 })
+    return arr.map(function (v) { return v === null ? null : (v / max) * 100 })
   }
 
   function visibleProcs(list, query, sort, gone, limit, order) {

@@ -31,3 +31,7 @@ test('every history span gets two to four ticks with distinct labels', () => {
     })
   })
 })
+
+test('normalizing a series keeps empty bins empty', () => {
+  assert.deepEqual(F.norm([null, 50, null, 100], 4), [null, 50, null, 100])
+})

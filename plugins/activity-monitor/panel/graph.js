@@ -50,7 +50,7 @@
       g.strokeStyle = o.rule
       g.lineWidth = 1
       g.setLineDash([2, 3])
-      ;(o.big ? [0.25, 0.5, 0.75] : [0.5]).forEach(function (f) {
+      ;(o.spark ? [0.5] : [0.25, 0.5, 0.75]).forEach(function (f) {
         var y = Math.round(h * f) + 0.5
         g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke()
       })
@@ -60,19 +60,21 @@
     var e = 1 - Math.pow(1 - F.clamp(o.progress, 0, 1), 3)
     var dx = w / (n - 1)
     var pad = o.big ? 3 : 1.5
-    var pts = a.map(function (v, i) {
-      return [w + (i - (a.length - 1)) * dx + (1 - e) * dx, pad + (h - 2 * pad) * (1 - F.clamp(v, 0, 100) / 100)]
-    })
+    function xAt(i) { return w + (i - (a.length - 1)) * dx + (1 - e) * dx }
+    function yAt(v) { return pad + (h - 2 * pad) * (1 - F.clamp(v, 0, 100) / 100) }
+    var pts = a.map(function (v, i) { return v === null || v === undefined ? null : [xAt(i), yAt(v)] })
     if (o.line === 'bars') {
-      var gap = dx >= 3 ? Math.max(1, dx * 0.3) : 0
-      a.forEach(function (v, i) {
-        var f = F.clamp(v, 0, 100) / 100
-        g.fillStyle = o.heat ? F.heat(f) : rgba(o.color, 0.35 + 0.65 * f)
-        g.fillRect(pts[i][0] - dx / 2 + gap / 2, pts[i][1], Math.max(0.5, dx - gap), h - pts[i][1])
-      })
+      bars()
       labels()
       return
     }
+    var runs = []
+    var run = null
+    pts.forEach(function (p) {
+      if (!p) { run = null; return }
+      if (!run) { run = []; runs.push(run) }
+      run.push(p)
+    })
     var stroke, fillTop, fillBot
     if (o.heat) {
       var hc = F.heatColors()
@@ -83,24 +85,26 @@
     } else {
       stroke = o.color; fillTop = rgba(o.color, o.big ? 0.28 : 0.22); fillBot = rgba(o.color, 0)
     }
-    function path() {
-      g.moveTo(pts[0][0], pts[0][1])
-      for (var i = 1; i < pts.length - 1; i++) {
-        g.quadraticCurveTo(pts[i][0], pts[i][1], (pts[i][0] + pts[i + 1][0]) / 2, (pts[i][1] + pts[i + 1][1]) / 2)
+    function path(r) {
+      g.moveTo(r[0][0], r[0][1])
+      for (var i = 1; i < r.length - 1; i++) {
+        g.quadraticCurveTo(r[i][0], r[i][1], (r[i][0] + r[i + 1][0]) / 2, (r[i][1] + r[i + 1][1]) / 2)
       }
-      g.lineTo(pts[pts.length - 1][0], pts[pts.length - 1][1])
+      g.lineTo(r[r.length - 1][0], r[r.length - 1][1])
     }
     if (o.line !== 'line') {
       var fill = g.createLinearGradient(0, 0, 0, h)
       fill.addColorStop(0, fillTop); fill.addColorStop(1, fillBot)
-      g.beginPath(); path(); g.lineTo(pts[pts.length - 1][0], h); g.lineTo(pts[0][0], h); g.closePath()
+      g.beginPath()
+      runs.forEach(function (r) { path(r); g.lineTo(r[r.length - 1][0], h); g.lineTo(r[0][0], h); g.closePath() })
       g.fillStyle = fill; g.fill()
     }
-    g.beginPath(); path()
+    g.beginPath()
+    runs.forEach(path)
     g.lineWidth = o.big ? (o.line === 'line' ? 1.8 : 1.6) : 1.25; g.lineJoin = 'round'; g.lineCap = 'round'; g.strokeStyle = stroke; g.stroke()
-    if (o.big) {
-      var lp = pts[pts.length - 1]
-      var pv = pts[pts.length - 2]
+    var lp = pts[pts.length - 1]
+    var pv = pts[pts.length - 2] || lp
+    if (o.big && lp) {
       var tx = Math.min(lp[0], w - 3)
       var t = (tx - pv[0]) / (lp[0] - pv[0] || 1)
       var ty = pv[1] + (lp[1] - pv[1]) * F.clamp(t, 0, 1)
@@ -109,6 +113,28 @@
       g.beginPath(); g.arc(tx, ty, 2.6, 0, Math.PI * 2); g.fillStyle = dot; g.fill()
     }
     labels()
+    function bars() {
+      var k = dx < 3 ? Math.ceil(3 / dx) : 1
+      var end = typeof o.end === 'number' ? o.end : a.length - 1
+      var gap = Math.max(1, k * dx * 0.3)
+      var group = null
+      function flush() {
+        if (!group || group.max === null) return
+        var f = F.clamp(group.max, 0, 100) / 100
+        var x0 = xAt(group.from) - dx / 2 + gap / 2
+        var x1 = xAt(group.to) + dx / 2 - gap / 2
+        var top = yAt(group.max)
+        g.fillStyle = o.heat ? F.heat(f) : rgba(o.color, 0.35 + 0.65 * f)
+        g.fillRect(x0, top, Math.max(0.5, x1 - x0), h - top)
+      }
+      a.forEach(function (v, i) {
+        var id = Math.floor((end - (a.length - 1 - i)) / k)
+        if (!group || group.id !== id) { flush(); group = { id: id, from: i, to: i, max: null } }
+        group.to = i
+        if (v !== null && v !== undefined && (group.max === null || v > group.max)) group.max = v
+      })
+      flush()
+    }
     function labels() {
       if (!ax || h < 40 || w < 90) return
       var list = [[ax.span, w - 2, h - 6, 'right']]

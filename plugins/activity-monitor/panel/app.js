@@ -23,6 +23,7 @@
   var LINES = ['fill', 'line', 'bars']
   var AGENTS = ['claude', 'codex', 'grok']
   var WINDOW_POINTS = 600
+  var EDGE = 0.1
   var SORTS = ['cpu', 'mem', 'name']
   var OPENS = ['last', 'all', 'procs']
   var DENSITIES = ['compact', 'default', 'comfortable']
@@ -129,19 +130,38 @@
     data.seq = 0
   }
 
-  function ingest(r) {
+  var FIELDS = [['tot', 'total'], ['mem', 'mem'], ['down', 'down'], ['up', 'up'], ['gpu', 'gpu'], ['dr', 'read'], ['dw', 'write']]
+  function blank() { var a = []; for (var i = 0; i < WINDOW_POINTS; i++) a.push(null); return a }
+
+  function placeWindow(points, spanSec, now) {
+    FIELDS.forEach(function (f) { data[f[0]] = blank() })
+    data.core = []
+    var spanMs = spanSec * 1000
+    var start = now - spanMs
+    var last = -1
+    points.forEach(function (p) {
+      var i = Math.max(last + 1, Math.floor((p.at - start) / (spanMs / WINDOW_POINTS)))
+      if (i >= WINDOW_POINTS) i = WINDOW_POINTS - 1
+      if (i <= last) return
+      last = i
+      FIELDS.forEach(function (f) { data[f[0]][i] = p[f[1]] })
+      p.cores.forEach(function (v, c) { if (!data.core[c]) data.core[c] = blank(); data.core[c][i] = v })
+    })
+  }
+
+  function ingest(r, spanSec) {
     if (r.boot !== data.boot) {
       reset()
       data.boot = r.boot
     }
     if (r.windowed || data.windowed) reset()
     data.windowed = !!r.windowed
-    r.history.forEach(function (p) {
-      if (!r.windowed && p.seq <= data.seq) return
-      push(data.tot, p.total); push(data.mem, p.mem); push(data.down, p.down); push(data.up, p.up)
-      push(data.gpu, p.gpu); push(data.dr, p.read); push(data.dw, p.write)
+    if (r.windowed) placeWindow(r.history, spanSec, Date.now())
+    else r.history.forEach(function (p) {
+      if (p.seq <= data.seq) return
+      FIELDS.forEach(function (f) { push(data[f[0]], p[f[1]]) })
       p.cores.forEach(function (v, i) { if (!data.core[i]) data.core[i] = []; push(data.core[i], v) })
-      if (!r.windowed) data.seq = p.seq
+      data.seq = p.seq
     })
     if (r.sample.battery && (!data.sample || r.sample.seq !== data.sample.seq)) push(data.bat, r.sample.battery.percent)
     data.sample = r.sample
@@ -206,8 +226,9 @@
   function poll() {
     if (view.paused || view.busy || document.hidden || !api || !api.plugin) return
     view.busy = true
-    api.plugin.request('stats.read', { procs: wantsProcs(), details: wantsDetails(), energy: wantsEnergy(), since: data.seq, interval: prefs.rate, span: prefs.hist, boot: data.boot }, { timeoutMs: 15000 }).then(function (r) {
-      ingest(r)
+    var spanSec = prefs.hist
+    api.plugin.request('stats.read', { procs: wantsProcs(), details: wantsDetails(), energy: wantsEnergy(), since: data.seq, interval: prefs.rate, span: spanSec, boot: data.boot }, { timeoutMs: 15000 }).then(function (r) {
+      ingest(r, spanSec)
       data.at = performance.now()
       view.error = ''
     }, function (e) {
@@ -1028,13 +1049,16 @@
     return '−' + (sec / 3600).toFixed(1).replace(/\.0$/, '') + 'h'
   }
 
-  function span() { return data.windowed ? WINDOW_POINTS : Math.max(10, Math.min(HISTORY, Math.round(prefs.hist * 1000 / prefs.rate))) }
-  function windowSec() { return data.windowed ? prefs.hist : (span() - 1) * prefs.rate / 1000 }
+  function liveSpan() { return Math.max(10, Math.min(HISTORY, Math.round(prefs.hist * 1000 / prefs.rate))) }
+  function liveSec() { return (liveSpan() - 1) * prefs.rate / 1000 }
+  function span() { return data.windowed ? WINDOW_POINTS : liveSpan() }
+  function windowSec() { return data.windowed ? prefs.hist : liveSec() }
 
   function timeRow(sec) {
     if (!prefs.clock) return '<div class="ctime"><span>' + ago(sec) + '</span><span>' + ago(sec / 2) + '</span><span>now</span></div>'
     return '<div class="ctime abs">' + Fmt.clockTicks(sec, Date.now()).map(function (t) {
-      return '<span style="left:' + (t.frac * 100).toFixed(2) + '%">' + esc(t.label) + '</span>'
+      var edge = t.frac < EDGE ? ' class="l"' : t.frac > 1 - EDGE ? ' class="r"' : ''
+      return '<span' + edge + ' style="left:' + (t.frac * 100).toFixed(2) + '%">' + esc(t.label) + '</span>'
     }).join('') + '</div>'
   }
 
@@ -1052,7 +1076,7 @@
       top = short(max) + '/s'
       mid = short(max / 2) + '/s'
     }
-    return { top: top, mid: mid, span: withSpan ? spanLabel(windowSec()) : null }
+    return { top: top, mid: mid, span: withSpan ? spanLabel(src === 'bat' ? liveSec() : windowSec()) : null }
   }
 
   function syncBg() {
@@ -1068,16 +1092,20 @@
     syncBg()
     root.querySelectorAll('canvas[data-src]').forEach(function (cv) {
       var kind = cv.dataset.kind
+      var spark = cv.dataset.xl === '0'
+      var live = kind === 'bat' || !data.windowed
       Graph.draw(cv, series(cv.dataset.src), {
         axes: axes(cv.dataset.src, cv.dataset.xl !== '0', !!cv.dataset.big && !cv.dataset.nospan),
         text: palette.secondary,
         bg: palette.bg,
-        n: span(),
+        n: kind === 'bat' ? liveSpan() : span(),
+        end: live && kind !== 'bat' ? data.seq : null,
         big: !!cv.dataset.big,
-        progress: data.windowed ? 1 : progress,
+        spark: spark,
+        progress: live ? progress : 1,
         heat: prefs.color === 'heat' && kind !== 'bat',
         color: tone(kind, 0),
-        line: cv.dataset.big ? prefs.line : 'fill',
+        line: spark ? 'fill' : prefs.line,
         grid: prefs.grid,
         rule: palette.grid,
         ts: ts()
