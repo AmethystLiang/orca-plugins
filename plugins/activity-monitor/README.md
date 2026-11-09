@@ -24,6 +24,12 @@ The strip at the bottom of the panel shows one word on a five-step scale, with a
 
 The badge keeps the worker running while the sidebar is closed, so warnings still fire. It's hidden below Critical. Windows has no pressure or swap reading, so there it goes by memory percent alone.
 
+## Clean up
+
+The broom in the footer starts a cleanup. It launches your chosen agent (Claude, Codex or Grok, set in Settings) in the workspace you have focused, and hands it the list of suspect processes below. The agent checks each one and proposes a kill list with a reason per process. Nothing is quit until you approve it in the agent's terminal. It never touches Orca, its helpers, or agents still running in Orca.
+
+While it works the broom shows **Cleaning…**, then **Review** with a count when the agent has a list for you, then how many were quit. Click it at any point to jump to the agent's terminal.
+
 ## Cleanup suspects
 
 The cleanup session gets a list of processes that look stale or runaway. The thresholds are conservative on purpose:
@@ -37,7 +43,8 @@ Hogs and leaks need about 5 and 10 minutes of samples. Orca and its helpers, sys
 
 ## Settings
 
-- **Graphs**: style (Smooth or Pixel), color (Heat, or Theme to recolor everything, including the health strip, from your theme's primary color to its destructive color), history (1m, 5m or 15m), and refresh (a stepper from 100ms to 10s, also in the footer). Pixel draws every graph, bar and the health level blocks as braille dots. Fast refresh uses more CPU.
+- **Graphs**: style (Smooth or Pixel), line style (Line + fill, Line or Bars, for Smooth graphs), color (Heat, or Theme to recolor everything, including the health strip, from your theme's primary color to its destructive color), gridlines on or off, history (1m, 5m, 15m, 1h, 6h or 24h), time labels (Relative, like "5m ago", or Clock, like "14:05"), record in background (keeps long history filling while the panel is closed), and refresh (a stepper from 100ms to 10s, also in the footer). Pixel draws every graph, bar and the health level blocks as braille dots. Fast refresh uses more CPU.
+- **Cleanup**: open cleanup terminal (switch to the agent's terminal when a cleanup starts), and the cleanup agent (Claude, Codex or Grok).
 - **Health**: the health strip on or off (it still shows at Strained or Critical), and the memory alert on or off. The memory alert only hides the pop-up inside the panel; the macOS notification at Critical still appears.
 - **Processes**: default sort (CPU, Memory or Name), and pulse on change, which flashes numbers that jump.
 - **General**: what the panel opens on (Last, All or Processes), text size (Small, Default or Large), and table rows (Compact, Default or Comfortable).
