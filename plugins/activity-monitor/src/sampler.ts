@@ -5,6 +5,7 @@ import type { Battery } from './details.ts'
 import { createLinux } from './linux.ts'
 import { createMac } from './mac.ts'
 import { createWindows } from './windows.ts'
+import { createHistory, RAW_MS } from './history.ts'
 import { createHealth, culpritOf, topSuspects, type Alert } from './health.ts'
 import { coreLayout, coreLoads, rate, type Core, type CpuTimes, type Memory, type Proc } from './parse.ts'
 
@@ -76,6 +77,8 @@ export type SamplerOptions = {
 }
 
 const HISTORY = 900
+const WINDOW_POINTS = 600
+const READ_RECENT_MS = 10000
 const SUSPECTS = 30
 const PROC_FLOOR = 900
 
@@ -122,8 +125,10 @@ export function createSampler(options: SamplerOptions = {}) {
   let latest: Sample | null = null
   let pending: Promise<Sample> | null = null
   let seq = 0
-  const history: Point[] = []
   const clock = options.clock ?? Date.now
+  const history = createHistory(clock)
+  let recording = true
+  let lastRead = -Infinity
   const health = createHealth(clock)
   const selfPids = options.selfPids ?? [process.pid, process.ppid]
   let alertSink: ((alert: Alert) => void) | null = null
@@ -193,7 +198,7 @@ export function createSampler(options: SamplerOptions = {}) {
       seq, at, cores, loads, total, memory: raw.memory, swap: raw.swap, swapTotal: raw.swapTotal ?? null, pressure: raw.pressure, net, disk, gpu: raw.gpu, note,
       split, counts: { procs: null, threads: null }, battery: raw.battery ?? null
     }
-    history.push({
+    if (recording || clock() - lastRead < READ_RECENT_MS) history.push({
       seq,
       at,
       total,
@@ -205,7 +210,6 @@ export function createSampler(options: SamplerOptions = {}) {
       write: disk?.write ?? 0,
       gpu: raw.gpu?.utilization ?? 0
     })
-    if (history.length > HISTORY) history.shift()
     return sample
   }
 
@@ -265,15 +269,19 @@ export function createSampler(options: SamplerOptions = {}) {
     return { procs: extra?.procs ?? (list ? list.length : null), threads }
   }
 
-  async function read(input: { procs?: boolean; details?: boolean; energy?: boolean; since?: number; interval?: number; boot?: string }) {
+  async function read(input: { procs?: boolean; details?: boolean; energy?: boolean; since?: number; interval?: number; boot?: string; span?: number }) {
+    lastRead = clock()
     interval = Math.min(10000, Math.max(100, Number(input.interval) || 1000))
     energy = input.energy === true
     if (!latest || Date.now() - latest.at >= interval * 0.7) latest = await next()
     const wantList = input.procs || input.details
     const [list, extra] = await Promise.all([wantList ? procs.ready() : null, input.details ? details.ready() : null])
-    const since = input.boot === boot ? Number(input.since) || 0 : 0
     const sample = { ...latest, counts: counts(list, extra) }
-    return { boot, sample, health: health.snapshot(), procs: input.procs ? merge(list, extra) : null, history: history.filter((point) => point.seq > since) }
+    const span = Number(input.span) || 0
+    const windowed = span * 1000 > RAW_MS || span * 1000 / interval > HISTORY
+    const since = input.boot === boot ? Number(input.since) || 0 : 0
+    const points = windowed ? history.window(span, WINDOW_POINTS) : history.since(since).slice(-HISTORY)
+    return { boot, sample, health: health.snapshot(), procs: input.procs ? merge(list, extra) : null, history: points, windowed }
   }
 
   async function pulse(): Promise<void> {
@@ -287,6 +295,27 @@ export function createSampler(options: SamplerOptions = {}) {
     const by: 'mem' | 'cpu' = snap.step === 2 ? 'cpu' : 'mem'
     const list = await procs.ready().catch(() => null)
     return { by, word: snap.word, cause: snap.cause, items: topSuspects(list, { selfPids, protectedNames: provider.protectedNames }, by, SUSPECTS) }
+  }
+
+  function listProcs(): Promise<Proc[] | null> {
+    return provider.procs().catch(() => null)
+  }
+
+  async function inspect(
+    pids: number[],
+    pickCwds: (args: Map<number, string>) => number[] = () => pids
+  ): Promise<{ cwds: Map<number, string | null>; args: Map<number, string> }> {
+    const args = await provider.args(pids).catch(() => new Map<number, string>())
+    const cwds = await provider.cwds(pickCwds(args)).catch(() => new Map<number, string | null>())
+    return { cwds, args }
+  }
+
+  function guard(): { selfPids: number[]; protectedNames: RegExp } {
+    return { selfPids, protectedNames: provider.protectedNames }
+  }
+
+  function setRecording(on: boolean): void {
+    recording = on
   }
 
   function onAlert(sink: (alert: Alert) => void): void {
@@ -305,5 +334,5 @@ export function createSampler(options: SamplerOptions = {}) {
     return provider.quit(pid, force)
   }
 
-  return { read, quit, pulse, suspects, onAlert, health: () => health.snapshot() }
+  return { read, quit, pulse, setRecording, suspects, onAlert, listProcs, inspect, guard, health: () => health.snapshot() }
 }

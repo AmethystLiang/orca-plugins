@@ -2,7 +2,7 @@
   "manifestVersion": 2,
   "id": "activity-monitor",
   "name": "Activity Monitor",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "execution": "trusted-worker",
   "description": "Live CPU cores, memory, network, disk, GPU and processes in Orca's sidebar, with a health strip that warns before your computer locks up.",
   "license": "MIT",
@@ -29,6 +29,11 @@
         "tone": "danger",
         "tooltip": "Activity Monitor: memory is critical; your computer may lock up"
       }
+    ],
+    "events": [
+      {
+        "on": "agent.status.changed"
+      }
     ]
   },
   "capabilities": [
@@ -40,6 +45,18 @@
     },
     {
       "kind": "terminal:send"
+    },
+    {
+      "kind": "workspace:read"
+    },
+    {
+      "kind": "agent:launch"
+    },
+    {
+      "kind": "terminal:read"
+    },
+    {
+      "kind": "storage:own"
     }
   ],
   "cover": {

@@ -3,7 +3,7 @@ export type Swap = { total: number; used: number }
 export type Counters = { rx: number; tx: number }
 import { parseCpuTime, type Extra } from './details.ts'
 
-export type Proc = { pid: number; cpu: number | null; mem: number; name: string; start: string | null } & Extra
+export type Proc = { pid: number; ppid?: number; cpu: number | null; mem: number; name: string; start: string | null } & Extra
 export type CpuTimes = { user: number; nice: number; sys: number; idle: number; irq: number }
 export type Core = { index: number; label: string }
 
@@ -92,12 +92,13 @@ export function parseDiskBytes(text: string): { read: number; write: number; dev
 export function parsePs(text: string): Proc[] {
   const list: Proc[] = []
   for (const line of text.split('\n')) {
-    const match = /^\s*(\d+)\s+([\d.,]+)\s+(\d+)\s+(?:(\S+)\s+([\d:.,-]+)\s+)?(\w{3}\s+\w{3}\s+\d+\s+[\d:]+\s+\d{4})\s+(.+?)\s*$/.exec(line)
+    const match = /^\s*(\d+)\s+(?:(\d+)\s+)?([\d.,]+)\s+(\d+)\s+(?:(\S+)\s+([\d:.,-]+)\s+)?(\w{3}\s+\w{3}\s+\d+\s+[\d:]+\s+\d{4})\s+(.+?)\s*$/.exec(line)
     if (!match) continue
-    const proc: Proc = { pid: Number(match[1]), cpu: Number(match[2].replace(',', '.')), mem: Number(match[3]) * 1024, name: match[7], start: match[6].replace(/\s+/g, ' ') }
-    if (match[4] !== undefined) {
-      proc.user = match[4]
-      proc.time = parseCpuTime(match[5])
+    const proc: Proc = { pid: Number(match[1]), cpu: Number(match[3].replace(',', '.')), mem: Number(match[4]) * 1024, name: match[8], start: match[7].replace(/\s+/g, ' ') }
+    if (match[2] !== undefined) proc.ppid = Number(match[2])
+    if (match[5] !== undefined) {
+      proc.user = match[5]
+      proc.time = parseCpuTime(match[6])
     }
     list.push(proc)
   }
@@ -234,14 +235,33 @@ export function parseDiskstats(text: string): { read: number; write: number; dev
   return devices ? { read, write, devices } : null
 }
 
-export function parseProcStat(text: string): { name: string; ticks: number; rssPages: number; kernel: boolean; start: string; threads: number } | null {
+export function parseProcStat(text: string): { name: string; ppid: number; ticks: number; rssPages: number; kernel: boolean; start: string; threads: number } | null {
   const open = text.indexOf('(')
   const close = text.lastIndexOf(')')
   if (open < 0 || close < open) return null
   const rest = text.slice(close + 2).trim().split(/\s+/)
   if (rest.length < 22) return null
   const kernel = (Number(rest[6]) & 0x00200000) !== 0 || rest[1] === '2'
-  return { name: text.slice(open + 1, close), ticks: Number(rest[11]) + Number(rest[12]), rssPages: Number(rest[21]), kernel, start: rest[19], threads: Number(rest[17]) }
+  return { name: text.slice(open + 1, close), ppid: Number(rest[1]), ticks: Number(rest[11]) + Number(rest[12]), rssPages: Number(rest[21]), kernel, start: rest[19], threads: Number(rest[17]) }
+}
+
+export function parseLsofCwd(text: string): Map<number, string> {
+  const out = new Map<number, string>()
+  let pid: number | null = null
+  for (const line of text.split('\n')) {
+    if (line.startsWith('p')) pid = Number(line.slice(1)) || null
+    else if (line.startsWith('n') && pid !== null && !out.has(pid)) out.set(pid, line.slice(1))
+  }
+  return out
+}
+
+export function parsePsArgs(text: string): Map<number, string> {
+  const out = new Map<number, string>()
+  for (const line of text.split('\n')) {
+    const match = /^\s*(\d+)\s+(.+?)\s*$/.exec(line)
+    if (match) out.set(Number(match[1]), match[2])
+  }
+  return out
 }
 
 export function parseNvidiaSmi(text: string): { utilization: number; model: string } | null {

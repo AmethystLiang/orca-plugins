@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Design options: cleanup button</title>
+<style>
+:root {
+  --app-bg: #000;
+  --app-fg: #e6e6e6;
+  --app-muted: #a3a3a3;
+  --app-border: #1f1f1f;
+  --app-accent: #1a1a1a;
+  --app-track: #141414;
+  --app-danger: #f87171;
+  --app-ok: #6ee7a0;
+  --app-warn: #fbbf24;
+  --app-radius: 8px;
+  --app-font: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --app-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+
+  --doc-bg: #f1efe9;
+  --doc-fg: #2b2a27;
+  --doc-muted: #8a877f;
+  --doc-pick: #16a34a;
+  --doc-font: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --doc-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --doc-surface: #ffffff;
+  --doc-line: #0002;
+  --doc-shadow: #0001;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --doc-bg: #161513;
+    --doc-fg: #e9e6df;
+    --doc-muted: #8f8b82;
+    --doc-pick: #22c55e;
+    --doc-surface: #211f1c;
+    --doc-line: #fff2;
+    --doc-shadow: #0006;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; padding: 24px 24px 220px; background: var(--doc-bg); color: var(--doc-fg); font: 14px/1.4 var(--doc-font); }
+header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 20px; }
+header h1 { font-size: 20px; margin: 0; }
+.round { font: 600 11px var(--doc-mono); background: var(--doc-fg); color: var(--doc-bg); padding: 3px 8px; border-radius: 99px; }
+.ledger { margin: 0 0 24px; padding: 10px 14px; border-left: 3px solid var(--doc-pick); background: var(--doc-surface); font-size: 13px; }
+.ledger div::before { content: "\2713  "; color: var(--doc-pick); font-weight: 700; }
+.issue { margin: 0 0 40px; }
+.issue h2 { font-size: 16px; margin: 0 0 4px; }
+.issue h2 .num { font-family: var(--doc-mono); color: var(--doc-muted); margin-right: 6px; }
+.said { color: var(--doc-muted); font-size: 12px; margin: 0 0 10px; }
+.said::before { content: "you: "; font-weight: 600; }
+.view { font-size: 12px; margin: 6px 0 0; color: var(--doc-muted); }
+.view::before { content: "my view: "; font-weight: 600; }
+.row { display: flex; gap: 16px; overflow-x: auto; padding: 6px 4px 10px; }
+.col { flex: 0 0 auto; position: relative; border-radius: 12px; padding: 8px; outline: 2px solid transparent; transition: outline-color .12s; }
+.col[data-opt] { cursor: pointer; }
+.col[data-opt]:hover { outline-color: var(--doc-line); }
+.col.picked { outline: 3px solid var(--doc-pick); background: color-mix(in srgb, var(--doc-pick) 8%, transparent); }
+.tick { display: none; position: absolute; top: -8px; right: -8px; width: 24px; height: 24px; border-radius: 50%; background: var(--doc-pick); color: #fff; font: 700 14px/24px var(--doc-font); text-align: center; }
+.col.picked .tick { display: block; }
+.cap { margin-top: 8px; font-size: 13px; max-width: 360px; }
+.cap .pick { font: 700 12px var(--doc-mono); background: var(--doc-fg); color: var(--doc-bg); padding: 1px 6px; border-radius: 4px; margin-right: 6px; }
+.cap .cost { display: block; color: var(--doc-muted); font-size: 12px; }
+.now .cap .pick { background: var(--doc-muted); }
+.screen { background: var(--app-bg); color: var(--app-fg); font-family: var(--app-font); border: 1px solid var(--app-border); border-radius: var(--app-radius); overflow: hidden; box-shadow: 0 6px 24px var(--doc-shadow); }
+.phone { width: 393px; min-height: 600px; border-radius: 44px; border: 10px solid #111; }
+textarea.notes { display: block; width: 100%; max-width: 760px; min-height: 40px; margin-top: 6px; padding: 8px; font: 13px var(--doc-font); border: 1px solid var(--doc-line); border-radius: 6px; background: var(--doc-surface); color: var(--doc-fg); resize: vertical; }
+details.archive { margin: 40px 0; color: var(--doc-muted); }
+#manual { margin-top: 48px; padding: 16px; background: var(--doc-surface); border: 1px dashed var(--doc-line); border-radius: 10px; max-width: 760px; }
+#manual h3 { margin: 0 0 8px; font-size: 14px; }
+#manual textarea { width: 100%; min-height: 90px; font: 13px var(--doc-mono); padding: 8px; border: 1px solid var(--doc-line); border-radius: 6px; background: var(--doc-bg); color: var(--doc-fg); }
+#legend { font: 12px var(--doc-mono); color: var(--doc-muted); margin: 10px 0 0; white-space: pre-wrap; user-select: all; }
+#bar { position: fixed; left: 0; right: 0; bottom: 0; background: #1c1b19f2; color: #eee; padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; font-size: 12px; z-index: 10; }
+#bar .grp { display: flex; gap: 4px; align-items: center; }
+#bar .grp b { font-family: var(--doc-mono); color: #aaa; margin-right: 2px; }
+#bar button { font: 600 12px var(--doc-mono); border: 1px solid #555; background: #2a2926; color: #ddd; padding: 3px 8px; border-radius: 5px; cursor: pointer; }
+#bar button.on { background: var(--doc-pick); border-color: var(--doc-pick); color: #fff; }
+#bar .actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+#bar input#line { width: 260px; font: 12px var(--doc-mono); background: #000; color: #fff; border: 1px solid #555; border-radius: 5px; padding: 4px 6px; }
+#bar #copy { background: #fff; color: #111; border-color: #fff; }
+#count { font-family: var(--doc-mono); color: #aaa; }
+#toast { color: #8f8; min-width: 60px; }
+
+.stack { display: flex; flex-direction: column; gap: 10px; }
+.lbl { font: 11px var(--doc-mono); color: var(--doc-muted); margin: 0 0 3px 2px; }
+.ft { width: 446px; height: 36px; display: flex; align-items: center; gap: 6px; padding: 0 10px; font: 12px/1.35 var(--app-font); color: var(--app-fg); background: var(--app-bg); white-space: nowrap; position: relative; }
+.ft.narrow { width: 300px; }
+.hs { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; margin-right: 6px; overflow: hidden; }
+.row { flex-wrap: wrap; }
+.hword { font-weight: 600; color: var(--c); }
+.hchev { display: grid; place-items: center; color: var(--app-muted); margin-left: -4px; }
+.pips { display: flex; gap: 3px; flex: none; }
+.pips i { width: 14px; height: 6px; border-radius: 2px; background: var(--app-track); }
+.pips i.on { background: var(--c); }
+.narrow .crit .pips { display: none; }
+.hq { flex: none; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 5px; background: var(--app-danger); color: #fff; margin-left: auto; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stp { display: flex; align-items: center; height: 22px; border: 1px solid var(--app-border); border-radius: 6px; font: 11px var(--app-mono); flex: none; }
+.stp a { width: 20px; height: 100%; display: grid; place-items: center; color: var(--app-muted); }
+.stp b { min-width: 58px; text-align: center; font-weight: 500; }
+.narrow .stp b { min-width: 40px; }
+.ib { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 4px; color: var(--app-muted); flex: none; position: relative; cursor: pointer; }
+.ib:hover { background: var(--app-accent); color: var(--app-fg); }
+.ico { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.ft .chev { width: 12px; height: 12px; }
+.cu { min-width: 0; display: flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border: 1px solid var(--app-border); border-radius: 6px; color: var(--app-muted); font-size: 11px; font-weight: 500; flex: none; cursor: pointer; position: relative; }
+.cu:hover { background: var(--app-accent); color: var(--app-fg); }
+.cu.review { color: var(--app-warn); border-color: #fbbf2455; }
+.cu.done { color: var(--app-ok); }
+.tip { display: none; position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%); background: #111; color: var(--app-fg); border: 1px solid var(--app-border); border-radius: 6px; padding: 4px 8px; font-size: 11px; font-weight: 400; white-space: nowrap; z-index: 3; box-shadow: 0 4px 12px #0008; }
+.ib:hover .tip, .cu:hover .tip { display: block; }
+.dot { position: absolute; top: 1px; right: 1px; width: 6px; height: 6px; border-radius: 50%; background: var(--app-warn); box-shadow: 0 0 0 2px var(--app-bg); }
+.dot.ok { background: var(--app-ok); }
+.dot.pulse { animation: pulse 1.2s ease-in-out infinite; background: var(--app-muted); }
+@keyframes pulse { 50% { opacity: .2; } }
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.ring { width: 13px; height: 13px; border-radius: 50%; border: 2px solid var(--app-track); border-top-color: var(--app-fg); animation: spin .9s linear infinite; }
+.sep { width: 1px; height: 14px; background: var(--app-border); flex: none; }
+.body-sliver { width: 446px; height: 60px; background: var(--app-bg); border-bottom: 1px solid var(--app-border); padding: 8px 10px; font: 11px var(--app-font); color: var(--app-muted); }
+.screen.wrap { width: fit-content; }
+.narrow .cu .t, .narrow .hq .n { display: none; }
+.narrow .cu { padding: 0 3px; height: 20px; }
+.narrow .hs { gap: 5px; }
+.narrow .hq:has(.n) { max-width: none; }
+</style>
+</head>
+<body data-key="design-options:am-cleanup:r2">
+
+<header>
+  <span class="round">ROUND 2</span>
+  <h1>Your picks together, one collision</h1>
+</header>
+
+<div class="ledger">
+  <div>1C broom icon sits with the controls, between the stepper and pause</div>
+  <div>2B while a cleanup runs it becomes a pill: Cleaning… → Review 4 → 4 quit</div>
+  <div>3A broom icon</div>
+  <div>Narrow panels: Quit drops the app name instead of clipping (fixes today's "Quit Chro…")</div>
+</div>
+
+<section class="issue" data-issue="1">
+  <h2><span class="num">1</span>Too tight at 300px: what gives?</h2>
+  <p class="said">1C + 2B: a text pill doesn't fit beside the stepper at 300px Critical</p>
+  <div class="row">
+    <div class="col"><div class="stack" data-states='{"place":"right","mix":"icons","lvs":[["ok",false],["crit",true]]}'></div>
+      <div class="cap"><span class="pick">1A</span>Pill wide, icon narrow<span class="cost">narrow uses spinner/dot; words only on hover</span></div></div>
+    <div class="col"><div class="stack" data-states='{"place":"right","mix":"hidestep","lvs":[["ok",false],["crit",true]]}'></div>
+      <div class="cap"><span class="pick">1B</span>Stepper hides while it runs<span class="cost">always words; refresh control gone until done</span></div></div>
+  </div>
+  <p class="view">1A: the stepper matters less than the words; 1B: the cleanup is short, so hiding the stepper is cheap</p>
+</section>
+
+<section class="issue" data-issue="2" data-keep="drawn">
+  <h2><span class="num">2</span>Ready to lock the footer?</h2>
+  <div class="row">
+    <div class="col"><div class="cap"><span class="pick">2A</span>Looks right<span class="cost">then on to chart settings</span></div></div>
+    <div class="col"><div class="cap"><span class="pick">2B</span>Close, with a fix<span class="cost">say what in the notes</span></div></div>
+  </div>
+</section>
+
+<details class="archive">
+  <summary>Earlier rounds</summary>
+  <div>Round 1: picked 1C (icon with controls), 2B (pill text shows progress), 3A (broom). Also fixed: labels clipped at 300px.</div>
+</details>
+
+<script>
+(function () {
+  var IC = {
+    chev: '<path d="m18 15-6-6-6 6"/>',
+    pause: '<rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/>',
+    gear: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.730l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+    broom: '<path d="m16 22-1-4"/><path d="M19 13.99a1 1 0 0 0 1-1V12a2 2 0 0 0-2-2h-3a1 1 0 0 1-1-1V4a2 2 0 0 0-4 0v5a1 1 0 0 1-1 1H6a2 2 0 0 0-2 2v.99a1 1 0 0 0 1 1"/><path d="M5 14h14l1.973 6.767A1 1 0 0 1 20 22H4a1 1 0 0 1-.973-1.233z"/><path d="m8 22 1-4"/>',
+    spark: '<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/>',
+    bot: '<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>'
+  };
+  function svg(n, cls) { return '<svg class="ico ' + (cls || '') + '" viewBox="0 0 24 24">' + IC[n] + '</svg>'; }
+  var TIP = {
+    idle: 'Ask your agent to clean up stale processes',
+    working: 'Agent is checking 7 processes · click to open',
+    waiting: 'Agent has a kill list for you · click to review',
+    done: 'Cleanup finished: 4 quit · click to open'
+  };
+  function button(o, state, narrow) {
+    var ic = o.icon || 'broom';
+    if (o.mix && state !== 'idle') {
+      if (narrow && o.mix === 'icons') o = { form: 'icon', style: 'A', icon: ic };
+      else o = { form: 'pill', style: 'B', icon: ic };
+    } else if (o.mix) o = { form: 'icon', icon: ic };
+    var tip = '<span class="tip">' + TIP[state] + '</span>';
+    if (o.form === 'pill') {
+      if (o.style === 'B' && state === 'working') return '<span class="cu"><span class="ring"></span>Cleaning…' + tip + '</span>';
+      if (o.style === 'B' && state === 'waiting') return '<span class="cu review">' + svg(ic) + 'Review 4' + tip + '</span>';
+      if (o.style === 'B' && state === 'done') return '<span class="cu done">' + svg('check') + '4 quit' + tip + '</span>';
+      return '<span class="cu">' + svg(ic) + '<span class="t">Clean up</span>' + tip + '</span>';
+    }
+    var inner = svg(ic), dot = '';
+    if (o.style === 'A' && state === 'working') inner = '<span class="ring"></span>';
+    if (o.style === 'A' && state === 'waiting') dot = '<span class="dot"></span>';
+    if (o.style === 'A' && state === 'done') dot = '<span class="dot ok"></span>';
+    if (o.style === 'C' && state === 'working') dot = '<span class="dot pulse"></span>';
+    if (o.style === 'C' && state === 'waiting') dot = '<span class="dot"></span>';
+    if (o.style === 'C' && state === 'done') dot = '<span class="dot ok"></span>';
+    return '<span class="ib">' + inner + dot + tip + '</span>';
+  }
+  function footer(o, lv, narrow, state) {
+    var crit = lv === 'crit';
+    var c = crit ? 'var(--app-danger)' : 'var(--app-ok)';
+    var on = crit ? 5 : 2;
+    var pips = '<span class="pips">' + [1,2,3,4,5].map(function (i) { return '<i class="' + (i <= on ? 'on' : '') + '"></i>'; }).join('') + '</span>';
+    var st = state || 'idle';
+    var b = o.place === 'none' ? '' : button(o, st, narrow);
+    var hideStep = narrow && o.mix === 'hidestep' && st !== 'idle';
+    var hs = '<span class="hs ' + (crit ? 'crit' : '') + '" style="--c:' + c + '"><b class="hword">' + (crit ? 'Critical' : 'Healthy') + '</b><span class="hchev">' + svg('chev', 'chev') + '</span>' + pips +
+      (o.place === 'left' ? b : '') + (crit ? (o.place === 'none' ? '<span class="hq">Quit Chrome</span>' : '<span class="hq">Quit<span class="n"> Chrome</span></span>') : '') + '</span>';
+    var stp = '<span class="stp"><a>−</a><b>2000ms</b><a>+</a></span>';
+    var right = (hideStep ? '' : stp) + (o.place === 'right' ? b : '') + '<span class="ib">' + svg('pause') + '</span><span class="ib">' + svg('gear') + '</span>';
+    return '<div class="screen wrap"><div class="ft' + (narrow ? ' narrow' : '') + '">' + hs + right + '</div></div>';
+  }
+  document.querySelectorAll('[data-set]').forEach(function (el) {
+    var o = JSON.parse(el.dataset.set);
+    var h = '<div class="lbl">446px · Healthy</div>' + footer(o, 'ok', false);
+    if (!o.only) h += '<div class="lbl">300px · Critical</div>' + footer(o, 'crit', true);
+    el.innerHTML = h;
+  });
+  document.querySelectorAll('[data-states]').forEach(function (el) {
+    var o = JSON.parse(el.dataset.states);
+    var lvs = o.lvs || [['ok', false]];
+    el.innerHTML = ['idle', 'working', 'waiting', 'done'].map(function (s) {
+      var name = { idle: 'ready', working: 'agent working', waiting: 'waiting for you', done: 'finished' }[s];
+      return lvs.map(function (l) {
+        return '<div class="lbl">' + name + ' · ' + (l[1] ? '300px Critical' : '446px Healthy') + '</div>' + footer(o, l[0], l[1], s);
+      }).join('');
+    }).join('');
+  });
+})();
+</script>
+
+
+
+<section id="manual">
+  <h3>Manual copy</h3>
+  <textarea id="answer" readonly placeholder="Click options above. Your answer appears here."></textarea>
+  <div id="legend"></div>
+</section>
+
+<div id="bar">
+  <div id="groups" style="display:flex;flex-wrap:wrap;gap:10px 18px"></div>
+  <div class="actions">
+    <span id="count"></span>
+    <input id="line" readonly aria-label="Answer line">
+    <button id="copy">Copy my picks</button>
+    <button id="clear">Clear</button>
+    <span id="toast"></span>
+  </div>
+</div>
+
+<script>
+(function () {
+  var KEY = document.body.dataset.key || location.pathname;
+  var state = { picks: {}, notes: {} };
+  try {
+    var saved = JSON.parse(localStorage.getItem(KEY) || "{}");
+    state.picks = saved.picks || {};
+    state.notes = saved.notes || {};
+  } catch (e) {}
+
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+  function issueOf(code) { var m = /^(\d+)/.exec(code); return m ? m[1] : code; }
+
+  var issues = [];
+  var options = {};
+  var labels = {};
+  var cards = {};
+
+  document.querySelectorAll(".issue").forEach(function (sec) {
+    var id = sec.dataset.issue;
+    var title = sec.querySelector("h2");
+    labels[id] = title ? title.textContent.replace(/^\s*\d+\s*/, "").trim() : id;
+    issues.push(id);
+    options[id] = [];
+
+    sec.querySelectorAll(".col").forEach(function (col) {
+      var chip = col.querySelector(".cap .pick");
+      if (!chip) return;
+      var code = chip.textContent.trim();
+      if (!/^\d+[A-Za-z]/.test(code)) return;
+      var name = (chip.nextSibling && chip.nextSibling.textContent || "").trim();
+      col.dataset.opt = code;
+      var tick = document.createElement("span");
+      tick.className = "tick";
+      tick.textContent = "✓";
+      col.appendChild(tick);
+      col.addEventListener("click", function (ev) {
+        if (ev.target.closest("textarea, input, a, select")) return;
+        choose(code);
+      });
+      cards[code] = col;
+      options[id].push({ code: code, name: name });
+    });
+
+    if (sec.dataset.keep !== "drawn") options[id].push({ code: id + "-keep", name: "keep as-is" });
+
+    var ta = document.createElement("textarea");
+    ta.className = "notes";
+    ta.dataset.issue = id;
+    ta.placeholder = "Notes on " + id + ": what's off, or what would make it the one";
+    ta.value = state.notes[id] || "";
+    ta.addEventListener("input", function () {
+      if (ta.value.trim()) state.notes[id] = ta.value; else delete state.notes[id];
+      save();
+      render();
+    });
+    sec.appendChild(ta);
+  });
+
+  var groups = document.getElementById("groups");
+  issues.forEach(function (id) {
+    var g = document.createElement("div");
+    g.className = "grp";
+    var b = document.createElement("b");
+    b.textContent = id;
+    g.appendChild(b);
+    options[id].forEach(function (o) {
+      var btn = document.createElement("button");
+      btn.dataset.code = o.code;
+      btn.title = o.name;
+      btn.textContent = /-keep$/.test(o.code) ? "keep" : o.code.slice(id.length);
+      btn.addEventListener("click", function () {
+        choose(o.code);
+        if (cards[o.code]) cards[o.code].scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+      });
+      g.appendChild(btn);
+    });
+    groups.appendChild(g);
+  });
+
+  document.getElementById("legend").textContent = issues.map(function (id) {
+    return id + "  " + labels[id] + "\n" + options[id].map(function (o) {
+      return "    " + o.code + "  " + o.name;
+    }).join("\n");
+  }).join("\n");
+
+  function choose(code) {
+    var id = issueOf(code);
+    if (state.picks[id] === code) delete state.picks[id]; else state.picks[id] = code;
+    save();
+    render();
+  }
+
+  function answerLine() {
+    return issues.filter(function (id) { return state.picks[id]; })
+      .map(function (id) { return state.picks[id]; }).join("  ");
+  }
+
+  function fullAnswer() {
+    var out = answerLine();
+    var notes = issues.filter(function (id) { return state.notes[id] && state.notes[id].trim(); })
+      .map(function (id) { return id + " (" + labels[id] + "): " + state.notes[id].trim().replace(/\s*\n\s*/g, " / "); });
+    if (notes.length) out += "\n\n" + notes.join("\n");
+    return out;
+  }
+
+  function render() {
+    Object.keys(cards).forEach(function (code) {
+      cards[code].classList.toggle("picked", state.picks[issueOf(code)] === code);
+    });
+    document.querySelectorAll("#groups button").forEach(function (btn) {
+      btn.classList.toggle("on", state.picks[issueOf(btn.dataset.code)] === btn.dataset.code);
+    });
+    var n = issues.filter(function (id) { return state.picks[id]; }).length;
+    document.getElementById("count").textContent = n + " / " + issues.length;
+    document.getElementById("line").value = answerLine();
+    document.getElementById("answer").value = fullAnswer();
+  }
+
+  function flash(msg) {
+    var t = document.getElementById("toast");
+    t.textContent = msg;
+    setTimeout(function () { t.textContent = ""; }, 2500);
+  }
+
+  function fallbackCopy() {
+    var ta = document.getElementById("answer");
+    ta.focus();
+    ta.select();
+    var ok = false;
+    try { ok = document.execCommand("copy"); } catch (e) {}
+    if (ok) flash("copied");
+    else { ta.scrollIntoView({ block: "center" }); flash("press ⌘C"); }
+  }
+
+  document.getElementById("copy").addEventListener("click", function () {
+    var text = fullAnswer();
+    if (!text) { flash("nothing picked"); return; }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { flash("copied"); }, fallbackCopy);
+    } else fallbackCopy();
+  });
+
+  document.getElementById("clear").addEventListener("click", function () {
+    state = { picks: {}, notes: {} };
+    document.querySelectorAll("textarea.notes").forEach(function (ta) { ta.value = ""; });
+    save();
+    render();
+  });
+
+  ["line", "answer"].forEach(function (id) {
+    document.getElementById(id).addEventListener("focus", function (ev) { ev.target.select(); });
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

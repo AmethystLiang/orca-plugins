@@ -71,6 +71,12 @@ export function createWindows(d: Deps, env: Record<string, string | undefined> =
       const row = parseWindowsProcs((await powershell('Get-Process -Id ' + Number(pid) + ' | ' + SELECT)) ?? '').find((r) => r.pid === pid)
       return row ? { name: row.name, start: row.start } : null
     },
+    async cwds() {
+      return new Map()
+    },
+    async args() {
+      return new Map()
+    },
     async quit(pid, force) {
       const out = await d.run('taskkill', force ? ['/F', '/PID', String(pid)] : ['/PID', String(pid)])
       if (out !== null) return { ok: true }

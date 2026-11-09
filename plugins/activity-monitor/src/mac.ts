@@ -7,15 +7,19 @@ import {
   parseGpu,
   parseNetstat,
   parsePorts,
+  parseLsofCwd,
   parsePs,
+  parsePsArgs,
   parseSwap,
   parseVmStat,
   pressureName,
   range
 } from './parse.ts'
 
-const PS_FIELDS = 'pid=,pcpu=,rss=,user=,time=,lstart=,comm='
+const PS_FIELDS = 'pid=,ppid=,pcpu=,rss=,user=,time=,lstart=,comm='
 const TOP_STATS = 'pid,threads,ports,idlew,power'
+
+const LSOF_AT_ONCE = 8
 
 export function createMac(d: Deps): Provider {
   const route = background(async () => {
@@ -122,6 +126,29 @@ export function createMac(d: Deps): Provider {
     async identify(pid) {
       const row = parsePs((await d.run('ps', ['-p', String(pid), '-co', PS_FIELDS])) ?? '').find((r) => r.pid === pid)
       return row ? { name: row.name, start: row.start } : null
+    },
+    async cwds(pids) {
+      const out = new Map<number, string | null>()
+      if (!pids.length) return out
+      const lookup = async (list: number[]) => {
+        const text = await d.run('lsof', ['-a', '-d', 'cwd', '-Fn', '-p', list.join(',')], { anyExit: true })
+        return text === null ? null : parseLsofCwd(text)
+      }
+      let found = await lookup(pids)
+      if (!found) {
+        const merged = new Map<number, string>()
+        for (let i = 0; i < pids.length; i += LSOF_AT_ONCE) {
+          const each = await Promise.all(pids.slice(i, i + LSOF_AT_ONCE).map((pid) => lookup([pid])))
+          for (const part of each) if (part) for (const [pid, path] of part) merged.set(pid, path)
+        }
+        found = merged
+      }
+      for (const pid of pids) out.set(pid, found.get(pid) ?? null)
+      return out
+    },
+    async args(pids) {
+      if (!pids.length) return new Map()
+      return parsePsArgs((await d.run('ps', ['-o', 'pid=,args=', '-p', pids.join(',')], { anyExit: true })) ?? '')
     },
     quit: signalQuit
   }

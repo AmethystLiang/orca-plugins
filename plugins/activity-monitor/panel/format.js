@@ -64,7 +64,7 @@
     var tail = arr.slice(-(window || 120))
     var max = 1
     for (var i = 0; i < tail.length; i++) if (tail[i] > max) max = tail[i]
-    return arr.map(function (v) { return (v / max) * 100 })
+    return arr.map(function (v) { return v === null ? null : (v / max) * 100 })
   }
 
   function visibleProcs(list, query, sort, gone, limit, order) {
@@ -89,5 +89,26 @@
     return { rows: rows.slice(0, limit), more: Math.max(0, rows.length - limit), matched: rows.length }
   }
 
-  root.AMFormat = { clamp: clamp, gib: gib, memSize: memSize, diskSize: diskSize, total: total, rate: rate, pct: pct, cpu: cpu, count: count, bytes: bytes, duration: duration, fixed: fixed, gb: gb, heat: heat, heatColors: heatColors, setLight: setLight, norm: norm, visibleProcs: visibleProcs }
+  var TICK_STEPS = [15, 20, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 10800, 21600, 43200, 86400]
+
+  function clockTicks(spanSec, nowMs) {
+    var step = TICK_STEPS[TICK_STEPS.length - 1]
+    for (var i = 0; i < TICK_STEPS.length; i++) if (spanSec / TICK_STEPS[i] <= 4) { step = TICK_STEPS[i]; break }
+    var spanMs = spanSec * 1000
+    var stepMs = step * 1000
+    var start = nowMs - spanMs
+    var midnight = new Date(nowMs)
+    midnight.setHours(0, 0, 0, 0)
+    var base = midnight.getTime()
+    var opts = step < 60 ? { hour: '2-digit', minute: '2-digit', second: '2-digit' } : { hour: '2-digit', minute: '2-digit' }
+    var out = []
+    for (var k = Math.ceil((start - base) / stepMs); base + k * stepMs < nowMs; k++) {
+      var at = base + k * stepMs
+      var frac = (at - start) / spanMs
+      if (frac > 0 && frac < 1) out.push({ label: new Date(at).toLocaleTimeString([], opts), frac: frac })
+    }
+    return out
+  }
+
+  root.AMFormat = { clockTicks: clockTicks,  clamp: clamp, gib: gib, memSize: memSize, diskSize: diskSize, total: total, rate: rate, pct: pct, cpu: cpu, count: count, bytes: bytes, duration: duration, fixed: fixed, gb: gb, heat: heat, heatColors: heatColors, setLight: setLight, norm: norm, visibleProcs: visibleProcs }
 })(typeof globalThis !== 'undefined' ? globalThis : this)

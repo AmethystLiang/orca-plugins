@@ -153,7 +153,7 @@ export function createLinux(d: Deps, root = '', home = os.homedir()): Provider {
         const parsed = text ? parseProcStat(text) : null
         if (!parsed || parsed.kernel) return
         ticks.set(pids[i], parsed.ticks / tick)
-        rows.push({ pid: pids[i], name: parsed.name, mem: parsed.rssPages * page, start: parsed.start, time: parsed.ticks / tick, threads: parsed.threads })
+        rows.push({ pid: pids[i], ppid: parsed.ppid, name: parsed.name, mem: parsed.rssPages * page, start: parsed.start, time: parsed.ticks / tick, threads: parsed.threads })
       })
       const pct = cpuPercents(previous, ticks, previousAt ? (now - previousAt) / 1000 : 0)
       previous = ticks
@@ -176,6 +176,21 @@ export function createLinux(d: Deps, root = '', home = os.homedir()): Provider {
     async identify(pid) {
       const parsed = parseProcStat(await d.read(root + '/proc/' + pid + '/stat'))
       return parsed ? { name: parsed.name, start: parsed.start } : null
+    },
+    async cwds(pids) {
+      const out = new Map<number, string | null>()
+      await Promise.all(pids.map(async (pid) => {
+        out.set(pid, (await d.readlink(root + '/proc/' + pid + '/cwd')) || null)
+      }))
+      return out
+    },
+    async args(pids) {
+      const out = new Map<number, string>()
+      await Promise.all(pids.map(async (pid) => {
+        const text = (await d.read(root + '/proc/' + pid + '/cmdline')).split('\0').filter(Boolean).join(' ')
+        if (text) out.set(pid, text)
+      }))
+      return out
     },
     quit: signalQuit
   }

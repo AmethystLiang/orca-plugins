@@ -7,7 +7,7 @@ import { createSampler } from '../src/sampler.ts'
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
-function fakeDeps(files, commands) {
+function fakeDeps(files, commands, links = {}) {
   const calls = []
   return {
     calls,
@@ -17,6 +17,7 @@ function fakeDeps(files, commands) {
       if (out === undefined) return null
       return typeof out === 'function' ? out(args) : out
     },
+    readlink: async (path) => (typeof links[path] === 'string' ? links[path] : null),
     read: async (path) => (typeof files[path] === 'function' ? files[path]() : files[path] ?? ''),
     list: async (path) => {
       const prefix = path.endsWith('/') ? path : path + '/'
@@ -106,7 +107,7 @@ test('Linux processes skip kernel threads and measure CPU between two reads', as
   const linux = createLinux(fakeDeps(linuxFiles({ '/proc/42/stat': () => stat42 }), GETCONF))
   const first = await linux.procs()
   assert.deepEqual(first.map((p) => p.pid).sort(), [1, 42])
-  assert.deepEqual(first.find((p) => p.pid === 42), { pid: 42, name: 'Web Content (x)', mem: 104857600, start: '777', cpu: 0, time: 15, threads: 1 })
+  assert.deepEqual(first.find((p) => p.pid === 42), { pid: 42, ppid: 1, name: 'Web Content (x)', mem: 104857600, start: '777', cpu: 0, time: 15, threads: 1 })
   stat42 = STAT_42.replace(' 1000 500 ', ' 1100 500 ')
   await sleep(1000)
   const cpu = (await linux.procs()).find((p) => p.pid === 42).cpu
@@ -352,4 +353,86 @@ test('a 100ms refresh samples fast but refreshes the process list at most about 
   while (Date.now() < until) { await sampler.read({ procs: true, interval: 100 }); await sleep(100) }
   assert.ok(reads >= 8, 'expected about 10 samples, got ' + reads)
   assert.ok(lists <= 2, 'expected at most 2 process lists, got ' + lists)
+})
+
+test('mac cwds read lsof output, mark missing pids null, and skip lsof for no pids', async () => {
+  const deps = fakeDeps({}, { lsof: 'p501\nfcwd\nn/Users/x/gone\n' })
+  const mac = createMac(deps)
+  assert.deepEqual(await mac.cwds([501]), new Map([[501, '/Users/x/gone']]))
+  assert.deepEqual(await mac.cwds([501, 502]), new Map([[501, '/Users/x/gone'], [502, null]]))
+  assert.ok(deps.calls.some((c) => c === 'lsof -a -d cwd -Fn -p 501'))
+  deps.calls.length = 0
+  assert.equal((await mac.cwds([])).size, 0)
+  assert.deepEqual(deps.calls, [])
+})
+
+test('mac cwds fall back to one lookup per pid when lsof fails on a gone pid', async () => {
+  const mac = createMac(fakeDeps({}, { lsof: (args) => (args[5] === '501' ? 'p501\nfcwd\nn/a\n' : null) }))
+  assert.deepEqual(await mac.cwds([501, 9]), new Map([[501, '/a'], [9, null]]))
+})
+
+test('mac cwds keep what a batched lsof printed when it exits non-zero, with no per-pid retries', async () => {
+  const seen = []
+  const deps = fakeDeps({}, {})
+  deps.run = async (command, args, options) => {
+    seen.push({ args: args.join(' '), anyExit: options?.anyExit === true })
+    return options?.anyExit ? 'p501\nfcwd\nn/a\n' : null
+  }
+  const mac = createMac(deps)
+  assert.deepEqual(await mac.cwds([501, 1, 2]), new Map([[501, '/a'], [1, null], [2, null]]))
+  assert.deepEqual(seen, [{ args: '-a -d cwd -Fn -p 501,1,2', anyExit: true }])
+})
+
+test('mac cwds run at most 8 single-pid lookups at once when the batch cannot run', async () => {
+  let running = 0
+  let peak = 0
+  const deps = fakeDeps({}, {})
+  deps.run = async (command, args) => {
+    const list = args[5].split(',')
+    if (list.length > 1) return null
+    running++
+    peak = Math.max(peak, running)
+    await new Promise((resolve) => setTimeout(resolve, 2))
+    running--
+    return 'p' + list[0] + '\nfcwd\nn/d' + list[0] + '\n'
+  }
+  const mac = createMac(deps)
+  const pids = Array.from({ length: 30 }, (_, i) => 100 + i)
+  const out = await mac.cwds(pids)
+  assert.equal(out.size, 30)
+  assert.equal(out.get(129), '/d129')
+  assert.ok(peak <= 8, 'peak ' + peak)
+})
+
+test('mac args read ps output', async () => {
+  const deps = fakeDeps({}, { ps: '  501 node /app/server.js --port 3000\n  502 vite\n' })
+  const mac = createMac(deps)
+  assert.deepEqual(await mac.args([501, 502]), new Map([[501, 'node /app/server.js --port 3000'], [502, 'vite']]))
+  assert.deepEqual(deps.calls, ['ps -o pid=,args= -p 501,502'])
+  assert.equal((await mac.args([])).size, 0)
+})
+
+test('mac args keep what a batched ps printed when a pid vanished and ps exits non-zero', async () => {
+  const seen = []
+  const deps = fakeDeps({}, {})
+  deps.run = async (command, args, options) => {
+    seen.push({ args: args.join(' '), anyExit: options?.anyExit === true })
+    return options?.anyExit ? '  501 node /app/server.js\n' : null
+  }
+  const mac = createMac(deps)
+  assert.deepEqual(await mac.args([501, 9]), new Map([[501, 'node /app/server.js']]))
+  assert.deepEqual(seen, [{ args: '-o pid=,args= -p 501,9', anyExit: true }])
+})
+
+test('Linux cwds read the proc cwd link and args read the NUL separated cmdline', async () => {
+  const linux = createLinux(fakeDeps(linuxFiles({ '/proc/42/cmdline': 'node\x00/app/server.js\x00--port\x003000\x00' }), GETCONF, { '/proc/42/cwd': '/home/me/app' }))
+  assert.deepEqual(await linux.cwds([42, 1]), new Map([[42, '/home/me/app'], [1, null]]))
+  assert.deepEqual(await linux.args([42, 1]), new Map([[42, 'node /app/server.js --port 3000']]))
+  assert.equal((await linux.cwds([])).size, 0)
+})
+
+test('Windows cwds and args are empty', async () => {
+  const win = createWindows(fakeDeps({}, {}), {})
+  assert.equal((await win.cwds([4])).size, 0)
+  assert.equal((await win.args([4])).size, 0)
 })
