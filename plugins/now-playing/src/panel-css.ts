@@ -22,6 +22,51 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--orca-ring, 
 .head { display: flex; gap: 10px; align-items: center; }
 .bigcover { width: 100%; aspect-ratio: 1; border-radius: 6px; object-fit: cover; background: var(--sp-chip); display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 18px rgba(0,0,0,0.18); }
 .bigcover .ic { width: 40px; height: 40px; }
+.coverwrap { position: relative; }
+.corner { position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; border-radius: 50%; background: rgba(0,0,0,0.5); color: #fff; opacity: 0; transition: opacity .15s; }
+.corner .ic { width: 12px; height: 12px; }
+.coverwrap:hover .corner, .corner:focus-visible { opacity: 1; }
+.corner:hover { background: rgba(0,0,0,0.7); }
+.minicover { flex: none; border-radius: 4px; }
+.minicover .cover { display: flex; }
+.minicover:hover { opacity: .85; }
+.player[data-size="small"] .titlerow { align-items: center; margin-top: 0; }
+.player[data-size="small"] .title { font-size: 14px; }
+.ctx { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 6px; background: var(--sp-chip); font-size: 11.5px; width: 100%; min-width: 0; }
+.ctx:hover { background: var(--sp-track); }
+.ctx .art { width: 22px; height: 22px; border-radius: 3px; }
+.ctx .clip { flex: 0 1 auto; }
+.ctx > .ic { margin-left: auto; width: 12px; height: 12px; color: var(--orca-muted-foreground, #8a8a8a); }
+.ctx .prog { display: flex; gap: 2px; margin-left: 2px; flex: none; }
+.ctx .prog i { width: 5px; height: 3px; border-radius: 1px; background: var(--sp-track); }
+.ctx .prog i.d { background: var(--sp-ok); }
+.ctx .pillsm { margin-left: auto; padding: 2px 8px; border-radius: 10px; background: var(--sp-ok); color: #fff; font-size: 10.5px; font-weight: 600; flex: none; }
+.app[data-app="music"] .ctx .pillsm { background: #fa2d48; }
+.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 8px; padding: 2px; }
+.tile { display: flex; flex-direction: column; gap: 3px; min-width: 0; border-radius: 6px; padding: 3px; }
+.tile:hover { background: var(--sp-hover); }
+.tcover { display: block; width: 100%; aspect-ratio: 1; border-radius: 5px; object-fit: cover; background: var(--sp-chip); }
+.tile .n { font-size: 11.5px; font-weight: 500; }
+.tile .s { font-size: 10.5px; }
+.sec .cnt { font-weight: 500; opacity: .7; margin-left: 6px; text-transform: none; letter-spacing: 0; }
+.backrow { display: flex; align-items: center; gap: 4px; padding: 2px 0; }
+.alb { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 4px; padding: 8px 4px 10px; }
+.albcover { display: block; width: 132px; height: 132px; border-radius: 8px; object-fit: cover; background: var(--sp-chip); box-shadow: 0 8px 22px rgba(0,0,0,0.35); }
+.alb .n { font-size: 15px; font-weight: 600; margin-top: 6px; max-width: 100%; }
+.pills { display: flex; gap: 8px; margin-top: 8px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 16px; font-size: 12px; font-weight: 600; background: var(--sp-chip); }
+.pill:hover { background: var(--sp-track); }
+.pill.pri { background: var(--orca-foreground, #e6e6e6); color: var(--orca-background, #1c1c1f); }
+.pill.pri:hover { opacity: .9; background: var(--orca-foreground, #e6e6e6); }
+.pill .ic { width: 13px; height: 13px; }
+.item .num { width: 18px; text-align: right; font-size: 11.5px; color: var(--orca-muted-foreground, #8a8a8a); flex: none; }
+.item.now .num { color: var(--sp-ok); }
+.item .dur { font-size: 11px; color: var(--orca-muted-foreground, #8a8a8a); min-width: 32px; text-align: right; flex: none; }
+.item .fav { width: 22px; height: 22px; color: var(--sp-ok); }
+.app[data-app="music"] .item .fav { color: #fa2d48; }
+.item .fav .ic { width: 12px; height: 12px; }
+.item .fav.off { opacity: 0; } .item:hover .fav.off, .item:focus-within .fav.off { opacity: .4; }
+.item .fav.off:hover { opacity: 1; }
 .titlerow { display: flex; gap: 8px; align-items: flex-start; margin-top: 2px; }
 .title { font-size: 15px; font-weight: 600; }
 .chiprow { display: flex; }

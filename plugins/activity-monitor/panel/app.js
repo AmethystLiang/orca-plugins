@@ -16,10 +16,14 @@
   var QUIT_GRACE = 8000
   var NAMES = { all: 'All', cpu: 'CPU', mem: 'Memory', net: 'Network', disk: 'Disk', gpu: 'GPU', energy: 'Energy', procs: 'Processes' }
   var ICONS = { all: 'grid', cpu: 'cpu', mem: 'mem', net: 'net', disk: 'disk', gpu: 'gpu', energy: 'bolt', procs: 'proc' }
-  var FOCUS_KEYS = ['tile', 'tab', 'hero', 'hquit', 'loadmore', 'htoastx', 'sort', 'colmenu', 'togglecol', 'resetcols', 'quitsel', 'quit', 'force', 'copy', 'copyname', 'explain', 'no', 'gear', 'pause', 'step', 'setgraph', 'setcolor', 'sethist', 'setstrip', 'setalert', 'setsort', 'setpulse', 'setopen', 'setrows', 'settext', 'resetprefs']
+  var FOCUS_KEYS = ['tile', 'tab', 'hero', 'hquit', 'loadmore', 'htoastx', 'sort', 'colmenu', 'togglecol', 'resetcols', 'quitsel', 'quit', 'force', 'copy', 'copyname', 'explain', 'no', 'gear', 'pause', 'step', 'cleanup', 'cutoastx', 'setgraph', 'setline', 'setcolor', 'setgrid', 'sethist', 'setclock', 'setrecord', 'setfocus', 'setagent', 'setstrip', 'setalert', 'setsort', 'setpulse', 'setopen', 'setrows', 'settext', 'resetprefs']
 
-  var DEFAULTS = { graph: 'smooth', color: 'heat', rate: 1000, hist: 60, strip: true, alert: true, sort: 'cpu', pulse: true, open: 'last', rows: 'default', text: 'default' }
-  var HISTS = [60, 300, 900]
+  var DEFAULTS = { graph: 'smooth', line: 'fill', color: 'heat', grid: true, rate: 1000, hist: 60, clock: false, record: true, strip: true, alert: true, sort: 'cpu', pulse: true, open: 'last', rows: 'default', text: 'default', focus: true, agent: 'claude' }
+  var HISTS = [60, 300, 900, 3600, 21600, 86400]
+  var LINES = ['fill', 'line', 'bars']
+  var AGENTS = ['claude', 'codex', 'grok']
+  var WINDOW_POINTS = 600
+  var EDGE = 0.1
   var SORTS = ['cpu', 'mem', 'name']
   var OPENS = ['last', 'all', 'procs']
   var DENSITIES = ['compact', 'default', 'comfortable']
@@ -35,6 +39,9 @@
   prefs.cols = Cols.clean(prefs.cols)
   if (HEROES.indexOf(prefs.hero) < 0) prefs.hero = 'cpu'
   if (HISTS.indexOf(prefs.hist) < 0) prefs.hist = DEFAULTS.hist
+  if (LINES.indexOf(prefs.line) < 0) prefs.line = DEFAULTS.line
+  if (AGENTS.indexOf(prefs.agent) < 0) prefs.agent = DEFAULTS.agent
+  ;['grid', 'clock', 'record', 'focus'].forEach(function (k) { if (typeof prefs[k] !== 'boolean') prefs[k] = DEFAULTS[k] })
   if (SORTS.indexOf(prefs.sort) < 0) prefs.sort = DEFAULTS.sort
   if (OPENS.indexOf(prefs.open) < 0) prefs.open = DEFAULTS.open
   if (DENSITIES.indexOf(prefs.rows) < 0) prefs.rows = DEFAULTS.rows
@@ -42,11 +49,11 @@
   function ts() { return TEXT_SCALE[prefs.text] }
   if (prefs.open !== 'last') prefs.tab = prefs.open
 
-  var data = { boot: null, sample: null, health: null, procs: null, seq: 0, at: 0, tot: [], mem: [], down: [], up: [], gpu: [], dr: [], dw: [], bat: [], core: [], norms: {} }
+  var data = { boot: null, sample: null, health: null, procs: null, seq: 0, at: 0, windowed: false, tot: [], mem: [], down: [], up: [], gpu: [], dr: [], dw: [], bat: [], core: [], norms: {} }
   var view = {
     paused: false, settings: false, sort: prefs.sort, query: '', ask: null, askMsg: '', stuck: false, gone: {}, error: '', busy: false,
     menu: null, colMenu: null, heroMenu: null, open: null, unselect: null, copied: null, holding: false, sel: null, drag: null, dragged: false, fitted: [],
-    glyph: 7.8, seen: {}, rows: 150, toastSeen: 0, hmsg: '', hmsgAt: 0, pointer: false, composing: false, hoverList: false, order: null, pending: false, dirty: true
+    glyph: 7.8, seen: {}, rows: 150, toastSeen: 0, cleanup: { kind: 'rest', n: null, count: 0 }, cleanupStarting: false, cleanupErr: '', cleanupErrAt: 0, hmsg: '', hmsgAt: 0, pointer: false, composing: false, hoverList: false, order: null, pending: false, dirty: true
   }
   var palette = { primary: '#e6e6e6', secondary: '#a3a3a3', grid: '#1f1f1f', bg: '#000000' }
 
@@ -55,9 +62,13 @@
     return isFinite(n) ? Math.min(RATE_MAX, Math.max(RATE_MIN, n)) : 1000
   }
   function savePrefs() { try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)) } catch (e) {} }
+  function syncPrefs() {
+    if (!api || !api.plugin) return
+    api.plugin.request('prefs.sync', { record: prefs.record, focus: prefs.focus, agent: prefs.agent }).then(null, function () {})
+  }
   function push(arr, v) { arr.push(v); if (arr.length > HISTORY) arr.shift() }
   function esc(s) { return String(s).replace(/[&<>"']/g, function (ch) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch] }) }
-  function icon(id) { return '<svg class="ico"><use href="#i-' + id + '"/></svg>' }
+  function icon(id, cls) { return '<svg class="ico' + (cls ? ' ' + cls : '') + '"><use href="#i-' + id + '"/></svg>' }
 
   function toRgb(color, fallback) {
     try {
@@ -119,15 +130,36 @@
     data.seq = 0
   }
 
-  function ingest(r) {
+  var FIELDS = [['tot', 'total'], ['mem', 'mem'], ['down', 'down'], ['up', 'up'], ['gpu', 'gpu'], ['dr', 'read'], ['dw', 'write']]
+  function blank() { var a = []; for (var i = 0; i < WINDOW_POINTS; i++) a.push(null); return a }
+
+  function placeWindow(points, spanSec, now) {
+    FIELDS.forEach(function (f) { data[f[0]] = blank() })
+    data.core = []
+    var spanMs = spanSec * 1000
+    var start = now - spanMs
+    var last = -1
+    points.forEach(function (p) {
+      var i = Math.max(last + 1, Math.floor((p.at - start) / (spanMs / WINDOW_POINTS)))
+      if (i >= WINDOW_POINTS) i = WINDOW_POINTS - 1
+      if (i <= last) return
+      last = i
+      FIELDS.forEach(function (f) { data[f[0]][i] = p[f[1]] })
+      p.cores.forEach(function (v, c) { if (!data.core[c]) data.core[c] = blank(); data.core[c][i] = v })
+    })
+  }
+
+  function ingest(r, spanSec) {
     if (r.boot !== data.boot) {
       reset()
       data.boot = r.boot
     }
-    r.history.forEach(function (p) {
+    if (r.windowed || data.windowed) reset()
+    data.windowed = !!r.windowed
+    if (r.windowed) placeWindow(r.history, spanSec, Date.now())
+    else r.history.forEach(function (p) {
       if (p.seq <= data.seq) return
-      push(data.tot, p.total); push(data.mem, p.mem); push(data.down, p.down); push(data.up, p.up)
-      push(data.gpu, p.gpu); push(data.dr, p.read); push(data.dw, p.write)
+      FIELDS.forEach(function (f) { push(data[f[0]], p[f[1]]) })
       p.cores.forEach(function (v, i) { if (!data.core[i]) data.core[i] = []; push(data.core[i], v) })
       data.seq = p.seq
     })
@@ -194,8 +226,9 @@
   function poll() {
     if (view.paused || view.busy || document.hidden || !api || !api.plugin) return
     view.busy = true
-    api.plugin.request('stats.read', { procs: wantsProcs(), details: wantsDetails(), energy: wantsEnergy(), since: data.seq, interval: prefs.rate, boot: data.boot }, { timeoutMs: 15000 }).then(function (r) {
-      ingest(r)
+    var spanSec = prefs.hist
+    api.plugin.request('stats.read', { procs: wantsProcs(), details: wantsDetails(), energy: wantsEnergy(), since: data.seq, interval: prefs.rate, span: spanSec, boot: data.boot }, { timeoutMs: 15000 }).then(function (r) {
+      ingest(r, spanSec)
       data.at = performance.now()
       view.error = ''
     }, function (e) {
@@ -279,7 +312,7 @@
     s.cores.forEach(function (core, i) {
       html += '<div class="cs"><span class="cl">' + esc(core.label) + '</span><div class="grow">' + plot('core' + i, 'cpu', false, span(), true) + '</div><span class="cp num">' + Fmt.pct(s.loads[i]) + '</span></div>'
     })
-    return html + '</div><div class="ctime"><span>' + ago(sec) + '</span><span>' + ago(sec / 2) + '</span><span>now</span></div>'
+    return html + '</div>' + timeRow(sec)
   }
 
   function memBody(layout) {
@@ -565,10 +598,17 @@
   }
 
   var DEMO = [10, 30, 22, 55, 40, 70, 48, 62, 35, 50, 28, 44]
+  var LINE_ICONS = {
+    fill: '<span class="lv"><svg viewBox="0 0 26 12"><path d="M0 9 L5 6 L9 8 L14 3 L19 6 L26 2 L26 12 L0 12z" fill="currentColor" opacity=".3"/><path d="M0 9 L5 6 L9 8 L14 3 L19 6 L26 2" fill="none" stroke="currentColor" stroke-width="1.3"/></svg></span>',
+    line: '<span class="lv"><svg viewBox="0 0 26 12"><path d="M0 9 L5 6 L9 8 L14 3 L19 6 L26 2" fill="none" stroke="currentColor" stroke-width="1.3"/></svg></span>',
+    bars: '<span class="lv"><svg viewBox="0 0 26 12"><g fill="currentColor"><rect x="1" y="7" width="3" height="5"/><rect x="6" y="4" width="3" height="8"/><rect x="11" y="8" width="3" height="4"/><rect x="16" y="2" width="3" height="10"/><rect x="21" y="5" width="3" height="7"/></g></svg></span>'
+  }
   function settingsView() {
     function choice(attr, current, opts) {
       return '<div class="seg">' + opts.map(function (o) {
-        return '<a data-' + attr + '="' + o[0] + '" class="' + (String(o[0]) === String(current) ? 'on' : '') + '" tabindex="0">' + (o[2] || '') + o[1] + '</a>'
+        var on = String(o[0]) === String(current)
+        var named = o[3] ? ' title="' + o[3] + '" aria-label="' + o[3] + '" aria-pressed="' + on + '"' : ''
+        return '<a data-' + attr + '="' + o[0] + '" class="' + (on ? 'on' : '') + '"' + named + ' tabindex="0">' + (o[2] || '') + o[1] + '</a>'
       }).join('') + '</div>'
     }
     var pts = DEMO.map(function (v, i) { return i * 10 + ',' + (18 - (v / 100) * 16).toFixed(1) }).join(' ')
@@ -580,9 +620,17 @@
     return '<div class="setv">' +
       grp('Graphs', [
         row('Graph style', choice('setgraph', prefs.graph, [['smooth', 'Smooth', smooth], ['braille', 'Pixel', pixel]])),
+        row('Line style', choice('setline', prefs.line, [['fill', '', LINE_ICONS.fill, 'Line + fill'], ['line', '', LINE_ICONS.line, 'Line'], ['bars', '', LINE_ICONS.bars, 'Bars']]), 'Smooth graphs only'),
         row('Color', choice('setcolor', prefs.color, [['heat', 'Heat'], ['theme', 'Theme']])),
-        row('History', choice('sethist', prefs.hist, [[60, '1m'], [300, '5m'], [900, '15m']])),
+        row('Gridlines', toggle('setgrid', prefs.grid, 'Gridlines')),
+        row('History', choice('sethist', prefs.hist, [[60, '1m'], [300, '5m'], [900, '15m'], [3600, '1h'], [21600, '6h'], [86400, '24h']])),
+        row('Time labels', choice('setclock', prefs.clock ? 'clock' : 'relative', [['relative', 'Relative'], ['clock', 'Clock']])),
+        row('Record in background', toggle('setrecord', prefs.record, 'Record in background'), 'Keeps long history full while the panel is closed'),
         row('Refresh', stepper())
+      ]) +
+      grp('Cleanup', [
+        row('Open cleanup terminal', toggle('setfocus', prefs.focus, 'Open cleanup terminal'), 'Switch to the agent when cleanup starts'),
+        row('Cleanup agent', choice('setagent', prefs.agent, [['claude', 'Claude'], ['codex', 'Codex'], ['grok', 'Grok']]))
       ]) +
       grp('Health', [
         row('Health strip', toggle('setstrip', prefs.strip, 'Health strip'), 'Shows anyway when Strained or Critical'),
@@ -619,7 +667,7 @@
     pips += '</span>'
     var q = ''
     if (step === 4 && h.culprit && h.culprit.quittable) {
-      q = '<a class="hq" data-hquit tabindex="0">Quit ' + esc(h.culprit.app) + '</a>'
+      q = '<a class="hq" data-hquit tabindex="0" title="Quit ' + esc(h.culprit.app) + '">Quit<span class="n"> ' + esc(h.culprit.app) + '</span></a>'
     }
     var tipText = h.cause + (h.culprit && step === 4 ? ' · ' + h.culprit.app + ' ' + Fmt.memSize(h.culprit.mem) : '')
     var open = !!pop.el
@@ -785,10 +833,117 @@
     })
   }
 
+  function fitFooter() {
+    var top = root.querySelector('.top')
+    var hs = top && top.querySelector('.hs')
+    if (!hs) return
+    var hq = hs.querySelector('.hq')
+    function over(el) { return !!el && el.scrollWidth > el.clientWidth }
+    if (over(hq)) hq.classList.add('short')
+    if (over(hs) || over(hq)) hs.classList.add('tight')
+    if (over(hs) || over(hq)) top.classList.add('slim')
+  }
+
   function stepper() {
     var fast = prefs.rate < RATE_FAST
     return '<div class="stp push' + (fast ? ' fast' : '') + '" title="Refresh every ' + prefs.rate + 'ms' + (fast ? '. Fast refresh uses more CPU.' : '') + '">' +
       '<a data-step="-1" tabindex="0" aria-label="Refresh faster">−</a><b class="num">' + prefs.rate + 'ms</b><a data-step="1" tabindex="0" aria-label="Refresh slower">+</a></div>'
+  }
+
+  var CLEANUP_POLL_MS = 3000
+  var RING_MS = 900
+  var cleanupTimer = null
+  var cleanupSeq = 0
+
+  function cleanupTip(c) {
+    if (c.kind === 'working') return 'Agent is checking ' + c.count + ' processes · click to open'
+    if (c.kind === 'review') return 'Agent has a kill list for you · click to review'
+    if (c.kind === 'quit') return 'Cleanup finished: ' + c.n + ' quit · click to open'
+    return 'Ask your agent to clean up stale processes'
+  }
+
+  function cleanupText(c) {
+    if (c.kind === 'working') return 'Cleaning…'
+    if (c.kind === 'review') return c.n == null ? 'Review' : 'Review ' + c.n
+    if (c.kind === 'quit') return c.n + ' quit'
+    return ''
+  }
+
+  function ring() { return '<span class="ring" style="animation-delay:-' + Math.round(performance.now() % RING_MS) + 'ms"></span>' }
+
+  function cleanupButton() {
+    var c = view.cleanup
+    var tip = esc(cleanupTip(c))
+    if (c.kind === 'rest') {
+      return '<a class="ib" data-cleanup title="' + tip + '" aria-label="' + tip + '" tabindex="0"' + (view.cleanupStarting ? ' aria-busy="true"' : '') + '>' + (view.cleanupStarting ? ring() : icon('broom')) + '</a>'
+    }
+    var text = esc(cleanupText(c))
+    var cls = c.kind === 'review' ? ' review' : c.kind === 'quit' ? ' done' : ''
+    var lead = c.kind === 'working' ? ring() : c.kind === 'quit' ? icon('check', 'wide') + icon('broom', 'slim') : icon('broom')
+    var dot = c.kind === 'review' ? '<span class="dot"></span>' : c.kind === 'quit' ? '<span class="dot ok"></span>' : ''
+    return '<a class="cu' + cls + '" data-cleanup title="' + tip + '" aria-label="' + text + '. ' + tip + '" tabindex="0">' + lead + '<span class="t">' + text + '</span>' + dot + '</a>'
+  }
+
+  function cleanupApply(r) {
+    if (!r || !r.state) return
+    var st = r.state
+    view.cleanup = { kind: st.kind, n: typeof st.n === 'number' ? st.n : null, count: typeof r.count === 'number' ? r.count : view.cleanup.count }
+    clearTimeout(cleanupTimer)
+    if (st.kind !== 'rest') cleanupTimer = setTimeout(cleanupRead, CLEANUP_POLL_MS)
+  }
+
+  function cleanupRead() {
+    if (!api || !api.plugin) return
+    var my = ++cleanupSeq
+    api.plugin.request('cleanup.state', {}, { timeoutMs: 15000 }).then(function (r) {
+      if (my !== cleanupSeq) return
+      cleanupApply(r)
+      render()
+    }, function () {
+      if (my !== cleanupSeq) return
+      clearTimeout(cleanupTimer)
+      cleanupTimer = setTimeout(cleanupRead, CLEANUP_POLL_MS)
+    })
+  }
+
+  function cleanupError(msg) {
+    view.cleanupErr = msg || 'Could not start a cleanup'
+    view.cleanupErrAt = Date.now()
+    setTimeout(render, TOAST_MS + 50)
+  }
+
+  function cleanupClick() {
+    if (!api || !api.plugin || view.cleanupStarting) return
+    var my = ++cleanupSeq
+    if (view.cleanup.kind === 'rest') {
+      view.cleanupStarting = true
+      view.cleanupErr = ''
+      render()
+      api.plugin.request('cleanup.start', {}, { timeoutMs: 60000 }).then(function (r) {
+        if (!r || !r.ok) { cleanupError(r && r.reason); cleanupRead() }
+        else if (my === cleanupSeq) cleanupApply(r)
+      }, function (e) {
+        cleanupError(e && (e.message || e.code))
+      }).then(function () {
+        view.cleanupStarting = false
+        render()
+      })
+      return
+    }
+    api.plugin.request('cleanup.open', {}, { timeoutMs: 15000 }).then(function (r) {
+      if (my !== cleanupSeq) return
+      cleanupApply(r)
+      render()
+    }, function (e) {
+      cleanupError(e && (e.message || e.code))
+      render()
+    })
+  }
+
+  function cleanupToast() {
+    if (!view.cleanupErr || Date.now() - view.cleanupErrAt > TOAST_MS) return ''
+    var msg = esc(view.cleanupErr)
+    return '<div class="htoast" role="alert"><i class="hdot" style="--c:var(--danger)"></i><b class="cerr" title="' + msg + '">' + msg + '</b><a class="ib" data-cutoastx title="Dismiss" tabindex="0">' + icon('x') + '</a></div>'
   }
 
   function focusKey() {
@@ -828,7 +983,7 @@
       body = settingsView()
     } else {
       var lv = data.health && data.sample ? data.health.level : 'ok'
-      top = healthToast() + '<div class="top lv-' + lv + '">' + healthStrip() + stepper() + '<a class="ib" data-pause title="' + (view.paused ? 'Resume' : 'Pause') + '" tabindex="0">' + icon(view.paused ? 'play' : 'pause') +
+      top = (healthToast() || cleanupToast()) + '<div class="top lv-' + lv + '">' + healthStrip() + stepper() + cleanupButton() + '<a class="ib" data-pause title="' + (view.paused ? 'Resume' : 'Pause') + '" tabindex="0">' + icon(view.paused ? 'play' : 'pause') +
         '</a><a class="ib" data-gear title="Settings" tabindex="0">' + icon('gear') + '</a></div>'
       if (!data.sample) {
         body = '<div class="note">' + esc(view.error || (api ? 'Reading your system…' : 'Open this panel in Orca.')) + '</div>'
@@ -860,6 +1015,7 @@
     var menu = view.settings || !data.sample ? '' : view.heroMenu ? heroMenuView() : view.colMenu ? colMenuView() : menuView()
     root.innerHTML = tabs + '<div class="pbody' + (layout.page ? ' page' : '') + (layout.all ? ' allp' : '') + '">' + body + '</div>' + top + menu
     placeMenu()
+    fitFooter()
     root.querySelector('.pbody').scrollTop = scrollTop
     var newList = root.querySelector('.pscroll')
     if (newList) newList.scrollTop = listTop
@@ -884,17 +1040,27 @@
   function spanLabel(sec) {
     if (sec < 90) return 'last ' + Math.round(sec) + 's'
     if (sec < 5400) return 'last ' + Math.round(sec / 60) + ' min'
-    return 'last ' + (sec / 3600).toFixed(1) + ' h'
+    return 'last ' + (sec / 3600).toFixed(1).replace(/\.0$/, '') + ' h'
   }
 
   function ago(sec) {
     if (sec < 90) return '−' + Math.round(sec) + 's'
     if (sec < 5400) return '−' + Math.round(sec / 60) + 'm'
-    return '−' + (sec / 3600).toFixed(1) + 'h'
+    return '−' + (sec / 3600).toFixed(1).replace(/\.0$/, '') + 'h'
   }
 
-  function span() { return Math.max(10, Math.min(HISTORY, Math.round(prefs.hist * 1000 / prefs.rate))) }
-  function windowSec() { return (span() - 1) * prefs.rate / 1000 }
+  function liveSpan() { return Math.max(10, Math.min(HISTORY, Math.round(prefs.hist * 1000 / prefs.rate))) }
+  function liveSec() { return (liveSpan() - 1) * prefs.rate / 1000 }
+  function span() { return data.windowed ? WINDOW_POINTS : liveSpan() }
+  function windowSec() { return data.windowed ? prefs.hist : liveSec() }
+
+  function timeRow(sec) {
+    if (!prefs.clock) return '<div class="ctime"><span>' + ago(sec) + '</span><span>' + ago(sec / 2) + '</span><span>now</span></div>'
+    return '<div class="ctime abs">' + Fmt.clockTicks(sec, Date.now()).map(function (t) {
+      var edge = t.frac < EDGE ? ' class="l"' : t.frac > 1 - EDGE ? ' class="r"' : ''
+      return '<span' + edge + ' style="left:' + (t.frac * 100).toFixed(2) + '%">' + esc(t.label) + '</span>'
+    }).join('') + '</div>'
+  }
 
   function axes(src, labeled, withSpan) {
     if (!labeled) return { top: null }
@@ -910,7 +1076,7 @@
       top = short(max) + '/s'
       mid = short(max / 2) + '/s'
     }
-    return { top: top, mid: mid, span: withSpan ? spanLabel(windowSec()) : null }
+    return { top: top, mid: mid, span: withSpan ? spanLabel(src === 'bat' ? liveSec() : windowSec()) : null }
   }
 
   function syncBg() {
@@ -926,16 +1092,22 @@
     syncBg()
     root.querySelectorAll('canvas[data-src]').forEach(function (cv) {
       var kind = cv.dataset.kind
+      var spark = cv.dataset.xl === '0'
+      var live = kind === 'bat' || !data.windowed
       Graph.draw(cv, series(cv.dataset.src), {
         axes: axes(cv.dataset.src, cv.dataset.xl !== '0', !!cv.dataset.big && !cv.dataset.nospan),
         text: palette.secondary,
         bg: palette.bg,
-        n: span(),
+        n: kind === 'bat' ? liveSpan() : span(),
+        end: live && kind !== 'bat' ? data.seq : null,
         big: !!cv.dataset.big,
-        progress: progress,
+        spark: spark,
+        progress: live ? progress : 1,
         heat: prefs.color === 'heat' && kind !== 'bat',
         color: tone(kind, 0),
-        grid: palette.grid,
+        line: spark ? 'fill' : prefs.line,
+        grid: prefs.grid,
+        rule: palette.grid,
         ts: ts()
       })
     })
@@ -1116,6 +1288,8 @@
     if (d.force) return
     if (d.step) { setRate(prefs.rate + Number(d.step) * RATE_STEP); return }
     if ('hquit' in d) { quitCulprit(); return }
+    if ('cleanup' in d) { cleanupClick(); return }
+    if ('cutoastx' in d) { view.cleanupErr = ''; render(); return }
     if ('loadmore' in d) { loadMore(); return }
     if ('htoastx' in d) { view.toastSeen = data.health ? data.health.alertAt : 0; render(); return }
     if (d.togglecol) { toggleCol(d.togglecol); render(); restoreFocus({ selector: '[data-togglecol="' + d.togglecol + '"]' }); return }
@@ -1134,8 +1308,14 @@
     if ('resetcols' in d) { prefs.cols = Cols.DEFAULT.slice(); savePrefs() }
     if ('gear' in d) { popClose(); view.settings = !view.settings }
     else if (d.setgraph) { prefs.graph = d.setgraph; savePrefs() }
+    else if (d.setline) { prefs.line = d.setline; savePrefs() }
     else if (d.setcolor) { prefs.color = d.setcolor; savePrefs() }
+    else if (d.setgrid) { prefs.grid = !prefs.grid; savePrefs() }
     else if (d.sethist) { prefs.hist = Number(d.sethist); data.norms = {}; savePrefs() }
+    else if (d.setclock) { prefs.clock = d.setclock === 'clock'; savePrefs() }
+    else if (d.setrecord) { prefs.record = !prefs.record; savePrefs(); syncPrefs() }
+    else if (d.setfocus) { prefs.focus = !prefs.focus; savePrefs(); syncPrefs() }
+    else if (d.setagent) { prefs.agent = d.setagent; savePrefs(); syncPrefs() }
     else if (d.setstrip) { prefs.strip = !prefs.strip; savePrefs() }
     else if (d.setalert) { prefs.alert = !prefs.alert; savePrefs() }
     else if (d.setpulse) { prefs.pulse = !prefs.pulse; savePrefs() }
@@ -1143,7 +1323,7 @@
     else if (d.setopen) { prefs.open = d.setopen; savePrefs() }
     else if (d.setrows) { prefs.rows = d.setrows; savePrefs() }
     else if (d.settext) { prefs.text = d.settext; savePrefs() }
-    else if ('resetprefs' in d) { Object.assign(prefs, DEFAULTS); view.sort = prefs.sort; view.order = null; data.norms = {}; savePrefs(); setRate(prefs.rate) }
+    else if ('resetprefs' in d) { Object.assign(prefs, DEFAULTS); view.sort = prefs.sort; view.order = null; data.norms = {}; savePrefs(); setRate(prefs.rate); syncPrefs() }
     else if (d.tab) {
       popClose()
       var before = wantsProcs()
@@ -1337,7 +1517,7 @@
     }, true)
   })
   document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape' && pop.el) popClose() })
-  window.addEventListener('resize', popPlace)
+  window.addEventListener('resize', function () { popPlace(); fitFooter() })
   root.addEventListener('pointerdown', hideTip)
   root.addEventListener('wheel', hideTip, { passive: true })
   root.addEventListener('pointerout', function (ev) {
@@ -1430,5 +1610,7 @@
   }
   requestAnimationFrame(frame)
   render()
+  syncPrefs()
   schedule()
+  cleanupRead()
 })()

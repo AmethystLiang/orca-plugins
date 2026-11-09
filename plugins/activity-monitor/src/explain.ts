@@ -26,16 +26,16 @@ function num(value: unknown): number | null {
   return value === null || value === undefined || value === '' || !Number.isFinite(n) ? null : n
 }
 
-function bytes(n: number): string {
+export function bytes(n: number): string {
   if (n >= 1024 ** 3) return (n / 1024 ** 3).toFixed(1) + ' GB'
   if (n >= 1024 ** 2) return Math.round(n / 1024 ** 2) + ' MB'
   return Math.max(0, Math.round(n / 1024)) + ' KB'
 }
 
-const OS: Record<string, string> = { darwin: 'macOS', linux: 'Linux', win32: 'Windows' }
+export const OS: Record<string, string> = { darwin: 'macOS', linux: 'Linux', win32: 'Windows' }
 
-const OPEN = '<<<PROCESS-DATA'
-const CLOSE = 'PROCESS-DATA>>>'
+export const OPEN = '<<<PROCESS-DATA'
+export const CLOSE = 'PROCESS-DATA>>>'
 
 export function safe(value: unknown, max = MAX_NAME): string {
   return clean(value, 1000)

@@ -59,41 +59,6 @@
       ],
       "releases": [
         {
-          "version": "1.1.1",
-          "commit": "b51de28c6a851a23fa70a0a47a634e2214f2e121",
-          "contentHash": "ec6a3114266cd568a151e2221d284795e4906067c971e5397282ab5f0d8370f8",
-          "execution": "sandboxed-ui",
-          "minimumOrca": "1.4.246",
-          "name": "Putt Request",
-          "contributes": [
-            {
-              "kind": "panels",
-              "name": "Putt Request"
-            }
-          ],
-          "capabilities": [
-            "storage:own"
-          ],
-          "images": {
-            "cover": {
-              "path": "plugins/putt-request/media/cover.png",
-              "alt": "The title Putt Request above three pixel-art mini golf holes on a dark starfield",
-              "sha256": "f20d2406960bc2bff59558b1da7ec233de43a3d96dea85a0171049ecc00486de",
-              "width": 1600,
-              "height": 1000
-            },
-            "screenshots": [
-              {
-                "path": "plugins/putt-request/media/screens.png",
-                "alt": "Three screens: the game library, a putt being lined up on the hole Off By One, and the private leaderboard",
-                "sha256": "e4fb3b3af499c44414c7f04a18b90bbd43efb152f7a5e2b6fbc9849babd24e99",
-                "width": 1600,
-                "height": 1000
-              }
-            ]
-          }
-        },
-        {
           "version": "1.1.0",
           "commit": "507a6ebae54510c5d7583823941c36728e520d6f",
           "contentHash": "13eec85770d8e84463355f101c5e6dd77b61092177b8e1be475e81a3957e2dd0",
@@ -179,47 +144,6 @@
       ],
       "releases": [
         {
-          "version": "1.0.1",
-          "commit": "b78761463467d88f814f6e5325e2e1850e353415",
-          "contentHash": "8f62ecb8cfe3a47aaf8b685a6d87be753c79deefae312303127672bcc717114d",
-          "execution": "trusted-worker",
-          "minimumOrca": "1.4.248",
-          "name": "Activity Monitor",
-          "contributes": [
-            {
-              "kind": "panels",
-              "name": "Activity Monitor"
-            },
-            {
-              "kind": "statusBarItems",
-              "name": "Critical"
-            }
-          ],
-          "capabilities": [
-            "notifications:show",
-            "agent:read",
-            "terminal:send"
-          ],
-          "images": {
-            "cover": {
-              "path": "plugins/activity-monitor/media/cover.png",
-              "alt": "Activity Monitor with live CPU, memory, network, disk and GPU graphs, and a red Critical strip offering to quit Google Chrome",
-              "sha256": "569c3b2f606f0c737c1379ba3e6752552a0917ea3a79c51cda48be52917c1a78",
-              "width": 1600,
-              "height": 1000
-            },
-            "screenshots": [
-              {
-                "path": "plugins/activity-monitor/media/screens.png",
-                "alt": "The All tab with a large CPU chart and tiles, the CPU tab with a graph per core, and the Processes tab sorted by CPU",
-                "sha256": "9d43f6aa4df3377379e1480d4a62b4b4bec650b433285e621da18a1c5ee47df5",
-                "width": 1600,
-                "height": 1000
-              }
-            ]
-          }
-        },
-        {
           "version": "1.0.0",
           "commit": "eda1b2c12e23c796654f82f5b9d6ff6ba15af4ad",
           "contentHash": "376839067d6b90578025765378b5ad6ce1c93493452836a0fd37737af4d81821",
@@ -270,15 +194,15 @@
         "ref": "main",
         "path": "plugins/now-playing"
       },
-      "description": "Control Spotify or Apple Music from the sidebar: your library, search, queue, devices, and DJ for Spotify.",
+      "description": "Control Spotify or Apple Music from the sidebar: your albums and library, search, queue, devices, and DJ for Spotify.",
       "categories": [
         "utilities"
       ],
       "releases": [
         {
-          "version": "1.3.2",
-          "commit": "b51de28c6a851a23fa70a0a47a634e2214f2e121",
-          "contentHash": "444a9cfc2ad95baaf372875c4e4abb1bac3df59c32e3d4ff8eb12b96e0f906aa",
+          "version": "1.4.0",
+          "commit": "ff143e7f60d9a3e62d4d3c2ecdbaf94fb31fd01c",
+          "contentHash": "2525f91d764aadeb32ad6ae897a65cf2483c0323978263a5c0191257d5bdccdd",
           "execution": "trusted-worker",
           "minimumOrca": "1.4.248",
           "name": "Now Playing",

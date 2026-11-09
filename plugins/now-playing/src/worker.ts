@@ -2,11 +2,14 @@ import type { JsonValue, OrcaWorkerApi } from 'orca/worker'
 import { createServer, type Server } from 'node:http'
 import { execFile } from 'node:child_process'
 import { SpotifyClient, SpotifyError, type FetchFn } from './client'
+import type { ApiCall } from './spotify'
 import { LOCAL_STATE_SCRIPT, localArgs, localCommand, localPlay, parseLocal, type LocalState } from './local'
-import { ART, musicArtScript, MUSIC_ARTWORK_SCRIPT, MUSIC_DEVICES_SCRIPT, MUSIC_LIBRARY_SCRIPT, MUSIC_STATE_SCRIPT, musicCommand, musicLibraryView, musicPlay, musicSearch, musicTracks, parseMusicDevices, parseMusicLibrary, parseMusicState, type MusicLibrary } from './music'
-import type { App, AuthStart, CommandResult, Device, LibraryView, ListView, NowPlaying, PlayerView, Setup, QueueView, Row, SearchView } from './protocol'
+import { albumRowFor, ART, musicArtScript, MUSIC_ARTWORK_SCRIPT, MUSIC_DEVICES_SCRIPT, MUSIC_LIBRARY_SCRIPT, MUSIC_STATE_SCRIPT, musicCommand, musicLibraryView, musicPlay, musicSearch, musicTracks, parseMusicDevices, parseMusicLibrary, parseMusicState, type MusicLibrary } from './music'
+import type { AlbumRef, App, AuthStart, CommandResult, Device, LibraryView, ListView, NowPlaying, PlayerView, Setup, QueueView, Row, SearchView } from './protocol'
 import {
+  albumRefOf,
   authorizeUrl,
+  likedFlags,
   base64url,
   commandCall,
   daylistUri,
@@ -55,6 +58,15 @@ const COVER_BIN = '/tmp/orca-now-playing-cover.bin'
 const COVER_JPG = '/tmp/orca-now-playing-cover.jpg'
 
 const message = (error: unknown): string => (error instanceof SpotifyError ? error.message : 'Could not reach Spotify. Check your connection.')
+
+const storeAlbum = (hit: Record<string, unknown> | undefined): AlbumRef | null => {
+  const name = typeof hit?.collectionName === 'string' ? hit.collectionName : ''
+  const url = typeof hit?.collectionViewUrl === 'string' && /^https:\/\/music\.apple\.com\//.test(hit.collectionViewUrl) ? hit.collectionViewUrl : null
+  const id = typeof hit?.collectionId === 'number' ? String(hit.collectionId) : null
+  const year = typeof hit?.releaseDate === 'string' && /^\d{4}/.test(hit.releaseDate) ? Number(hit.releaseDate.slice(0, 4)) : null
+  if (!name) return null
+  return { uri: null, id, name, year, total: typeof hit?.trackCount === 'number' ? hit.trackCount : null, number: typeof hit?.trackNumber === 'number' ? hit.trackNumber : null, openUrl: url }
+}
 
 function bytesToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer)
@@ -182,6 +194,17 @@ export function startWorker(orca: OrcaWorkerApi, deps: WorkerDeps): { dispose():
     return { ...now, liked: known ?? null }
   }
 
+  const albumRefs = new Map<string, AlbumRef | null>()
+  const withAlbum = async (now: NowPlaying): Promise<NowPlaying> => {
+    if (!now.trackId || now.albumRef?.uri) return now
+    if (!albumRefs.has(now.trackId)) {
+      const found = albumRefOf(await client.get(`/tracks/${encodeURIComponent(now.trackId)}`).catch(() => null))
+      if (found || albumRefs.size < 200) albumRefs.set(now.trackId, found)
+    }
+    const ref = albumRefs.get(now.trackId)
+    return ref ? { ...now, albumRef: ref } : now
+  }
+
   let chosen: App | null | undefined
   const currentApp = async (): Promise<App | null> => {
     if (chosen === undefined) {
@@ -200,44 +223,46 @@ export function startWorker(orca: OrcaWorkerApi, deps: WorkerDeps): { dispose():
     return library
   }
 
-  let musicCover: { id: string; data: string | null } | null = null
-  const lookupCover = async (name: string, artist: string): Promise<string | null> => {
+  type Found = { data: string | null; store: AlbumRef | null }
+  let musicCover: { id: string; found: Found } | null = null
+  const lookupStore = async (name: string, artist: string): Promise<Found> => {
+    const none: Found = { data: null, store: null }
     try {
       const term = encodeURIComponent(`${artist} ${name}`.slice(0, 120))
       const response = await deps.fetch(`https://itunes.apple.com/search?term=${term}&entity=song&media=music&limit=1`)
-      if (!response.ok) return null
-      const body = (await response.json()) as { results?: { artworkUrl100?: unknown }[] } | null
-      const small = body?.results?.[0]?.artworkUrl100
-      if (typeof small !== 'string' || !/^https:\/\/is\d+-ssl\.mzstatic\.com\//.test(small)) return null
+      if (!response.ok) return none
+      const body = (await response.json()) as { results?: Record<string, unknown>[] } | null
+      const hit = body?.results?.[0]
+      const store = storeAlbum(hit)
+      const small = hit?.artworkUrl100
+      if (typeof small !== 'string' || !/^https:\/\/is\d+-ssl\.mzstatic\.com\//.test(small)) return { data: null, store }
       const art = await deps.fetch(small.replace(/\/\d+x\d+bb\./, '/600x600bb.'))
       const type = art.headers.get('content-type') ?? 'image/jpeg'
-      if (!art.ok || !/^image\/(jpeg|png|webp)$/.test(type)) return null
+      if (!art.ok || !/^image\/(jpeg|png|webp)$/.test(type)) return { data: null, store }
       const data = `data:${type};base64,${bytesToBase64(await art.arrayBuffer())}`
-      return data.length <= IMAGE_MAX_CHARS ? data : null
+      return { data: data.length <= IMAGE_MAX_CHARS ? data : null, store }
     } catch {
-      return null
+      return none
     }
   }
 
-  const coverFor = async (id: string, lookup: { name: string; artist: string } | null): Promise<string | null> => {
-    if (musicCover?.id === id) return musicCover.data
-    musicCover = { id, data: null }
+  const coverFor = async (id: string, lookup: { name: string; artist: string } | null): Promise<Found> => {
+    if (musicCover?.id === id) return musicCover.found
+    const mine: { id: string; found: Found } = { id, found: { data: null, store: null } }
+    musicCover = mine
     if (lookup && lookup.artist) {
-      const found = await lookupCover(lookup.name, lookup.artist)
-      if (found) {
-        if (musicCover.id === id) musicCover.data = found
-        return found
-      }
+      const found = await lookupStore(lookup.name, lookup.artist)
+      mine.found = found
+      if (found.data) return found
     }
     try {
-      if ((await deps.run('osascript', MUSIC_ARTWORK_SCRIPT(COVER_BIN))).trim() !== 'ok') return null
+      if ((await deps.run('osascript', MUSIC_ARTWORK_SCRIPT(COVER_BIN))).trim() !== 'ok') return mine.found
       await deps.run('/usr/bin/sips', ['-s', 'format', 'jpeg', '-Z', '640', COVER_BIN, '--out', COVER_JPG])
       const data = `data:image/jpeg;base64,${(await deps.run('/usr/bin/base64', ['-i', COVER_JPG])).replace(/\s+/g, '')}`
-      if (data.length > IMAGE_MAX_CHARS) return null
-      if (musicCover.id === id) musicCover.data = data
-      return data
+      if (data.length <= IMAGE_MAX_CHARS) mine.found = { ...mine.found, data }
+      return mine.found
     } catch {
-      return null
+      return mine.found
     }
   }
 
@@ -259,8 +284,21 @@ export function startWorker(orca: OrcaWorkerApi, deps: WorkerDeps): { dispose():
     const base = { status: 'ok' as const, app: 'music' as const, devices: [], checkedAt: deps.now(), setup: 'connected' as const, pausedMs: 0 }
     if (!state || (state.status !== 'playing' && state.status !== 'paused')) return { ...base, now: null, devices: [{ id: 'local', name: 'This Mac', type: 'Computer', active: true, volume: state?.status === 'stopped' ? state.volume : null }] }
     const now = state.now
-    const cover = now.trackId ? await coverFor(`${now.trackId}|${now.name}|${now.artists}|${now.album}`, now.durationMs === 0 ? { name: now.name, artist: now.artists } : null) : null
-    return { ...base, now: { ...now, cover, device: { id: 'local', name: 'This Mac', type: 'Computer', active: true, volume: state.volume } } }
+    const inLibrary = now.trackId !== null && musicLibrary?.library.tracks.some((track) => track.id === now.trackId) === true
+    const streamed = now.durationMs === 0 || (musicLibrary !== null && !inLibrary)
+    const found = now.trackId ? await coverFor(`${now.trackId}|${now.name}|${now.artists}|${now.album}`, streamed ? { name: now.name, artist: now.artists } : null) : { data: null, store: null }
+    const albumRef = albumRefForMusic(now, inLibrary, found.store)
+    return { ...base, now: { ...now, cover: found.data, albumRef, device: { id: 'local', name: 'This Mac', type: 'Computer', active: true, volume: state.volume } } }
+  }
+
+  const albumRefForMusic = (now: NowPlaying, inLibrary: boolean, store: AlbumRef | null): AlbumRef | null => {
+    if (inLibrary && now.trackId && musicLibrary) {
+      const row = albumRowFor(musicLibrary.library, now.trackId)
+      if (row) return { uri: row.uri, id: row.id, name: row.name, year: row.year ?? now.albumRef?.year ?? null, total: row.count ?? null, number: now.albumRef?.number ?? null, openUrl: null }
+    }
+    if (musicLibrary === null && now.durationMs > 0) return null
+    if (store) return { ...store, number: null, total: null }
+    return now.albumRef && now.albumRef.name ? { ...now.albumRef, uri: null, total: null, number: null } : null
   }
 
   const setupState = async (): Promise<Setup> => {
@@ -276,7 +314,7 @@ export function startWorker(orca: OrcaWorkerApi, deps: WorkerDeps): { dispose():
     const list = live ? (deviceCache?.list ?? []) : []
     const mac = list.find((device) => device.active && device.type === 'Computer') ?? { id: 'local', name: 'This Mac', type: 'Computer', active: true, volume: null }
     const base = { ...mine.now, device: { ...mac, volume: mine.volume } }
-    const now = live ? await withLiked(base) : base
+    const now = live ? await withAlbum(await withLiked(base)) : base
     return { status: 'ok', app: 'spotify', now, devices: list, checkedAt: deps.now(), setup, pausedMs }
   }
 
@@ -405,7 +443,7 @@ export function startWorker(orca: OrcaWorkerApi, deps: WorkerDeps): { dispose():
     const command = parseCommand(input)
     if (!command) return { ok: false, message: 'That control did not work.' }
     if ((await currentApp()) === 'music') {
-      const args = command.action === 'playContext' ? musicPlay(musicLibrary?.library ?? null, command.contextUri, command.offsetUri) : command.action === 'playTrack' ? musicPlay(null, command.uri) : musicCommand(command)
+      const args = command.action === 'playContext' ? musicPlay(musicLibrary?.library ?? null, command.contextUri, command.offsetUri, command.shuffle === true) : command.action === 'playTrack' ? musicPlay(null, command.uri) : musicCommand(command)
       if (!args) return { ok: false, message: 'Apple Music cannot do that from here.' }
       try {
         const skip = command.action === 'next' || command.action === 'previous'
@@ -450,7 +488,7 @@ export function startWorker(orca: OrcaWorkerApi, deps: WorkerDeps): { dispose():
     }
     const viaApp = async (): Promise<CommandResult | null> => {
       if (deps.platform !== 'darwin') return null
-      const args = command.action === 'playContext' ? localPlay(command.offsetUri ?? command.contextUri, command.offsetUri ? command.contextUri : undefined) : command.action === 'playTrack' ? localPlay(command.uri) : null
+      const args = command.action === 'playContext' ? localPlay(command.offsetUri ?? command.contextUri, command.offsetUri ? command.contextUri : undefined, command.shuffle === true) : command.action === 'playTrack' ? localPlay(command.uri) : null
       if (!args) return null
       try {
         await deps.run('osascript', args)
@@ -470,6 +508,7 @@ export function startWorker(orca: OrcaWorkerApi, deps: WorkerDeps): { dispose():
       }
       const call = commandCall(command, deviceId)
       if (!call) return { ok: false, message: 'That control did not work.' }
+      if (command.action === 'playContext' && command.shuffle === true) await client.call(commandCall({ action: 'shuffle', on: true }, deviceId) as ApiCall)
       await client.call(call)
       if (command.action === 'like') liked.set(command.trackId, command.on)
       if (command.action === 'transfer' || command.action === 'volume') deviceCache = null
@@ -565,6 +604,11 @@ export function startWorker(orca: OrcaWorkerApi, deps: WorkerDeps): { dispose():
     try {
       const body = (await client.get(path(id))) as { items?: unknown; tracks?: unknown } | null
       const list: ListView = { rows: rows(kind === 'artist' ? body?.tracks : body?.items, trackRow), message: null, savedAt: null }
+      if (kind === 'album' && list.rows.length > 0) {
+        const ids = list.rows.slice(0, 50).map((row) => row.id)
+        const flags = likedFlags(await client.get(`/me/tracks/contains?ids=${encodeURIComponent(ids.join(','))}`).catch(() => null))
+        if (flags.length === ids.length) list.rows = list.rows.map((row, i) => (i < flags.length ? { ...row, liked: flags[i] } : row))
+      }
       const saved = ((await orca.storage.get(TRACKS_KEY).catch(() => null)) ?? {}) as Record<string, { at: number; rows: Row[] }>
       const key = `${kind}:${id}`
       const kept = Object.entries(saved).filter(([name]) => name !== key).sort((a, b) => b[1].at - a[1].at).slice(0, TRACKS_KEEP - 1)

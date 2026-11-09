@@ -18,7 +18,7 @@ export const MUSIC_STATE_SCRIPT = [
   'try',
   'set fav to (favorited of t) as string',
   'end try',
-  'return s & d & (persistent ID of t) & d & (name of t) & d & (artist of t) & d & (album of t) & d & ((duration of t) as string) & d & ((player position) as string) & d & ((shuffle enabled) as string) & d & ((song repeat) as string) & d & ((sound volume) as string) & d & fav',
+  'return s & d & (persistent ID of t) & d & (name of t) & d & (artist of t) & d & (album of t) & d & ((duration of t) as string) & d & ((player position) as string) & d & ((shuffle enabled) as string) & d & ((song repeat) as string) & d & ((sound volume) as string) & d & fav & d & ((track number of t) as string) & d & ((track count of t) as string) & d & ((year of t) as string)',
   'on error',
   'return "stopped" & d & ((sound volume) as string)',
   'end try',
@@ -78,12 +78,14 @@ export const MUSIC_LIBRARY_SCRIPT = [
   'set dn to disc number of every track of L',
   'set tn to track number of every track of L',
   'set db to database ID of every track of L',
+  'set yr to year of every track of L',
+  'set du to duration of every track of L',
   'set fv to {}',
   'try',
   'set fv to favorited of every track of L',
   'end try',
   'set AppleScript\'s text item delimiters to d',
-  'set out to {(ids as text), (nm as text), (ar as text), (al as text), (aa as text), (dn as text), (tn as text), (db as text), (fv as text)}',
+  'set out to {(ids as text), (nm as text), (ar as text), (al as text), (aa as text), (dn as text), (tn as text), (db as text), (yr as text), (du as text), (fv as text)}',
   'set pl to {}',
   'repeat with p in (every user playlist)',
   'try',
@@ -114,7 +116,7 @@ export const MUSIC_DEVICES_SCRIPT = [
   'end tell'
 ]
 
-export type MusicTrack = { id: string; name: string; artist: string; album: string; albumArtist: string; disc: number; number: number; added: number; favorite: boolean }
+export type MusicTrack = { id: string; name: string; artist: string; album: string; albumArtist: string; disc: number; number: number; added: number; year: number; durationMs: number; favorite: boolean }
 export type MusicPlaylist = { id: string; name: string; count: number }
 export type MusicLibrary = { tracks: MusicTrack[]; playlists: MusicPlaylist[] }
 
@@ -132,13 +134,17 @@ export function parseMusicState(stdout: string): MusicState | null {
     const volume = number(parts[1] ?? '')
     return { status: 'stopped', volume: parts.length === 2 && Number.isFinite(volume) ? volume : null }
   }
-  if (parts.length !== 11) return null
-  const [state, id, name, artist, album, duration, position, shuffle, repeat, volume, favorite] = parts
+  if (parts.length !== 11 && parts.length !== 14) return null
+  const [state, id, name, artist, album, duration, position, shuffle, repeat, volume, favorite, trackNumber = '0', trackCount = '0', year = '0'] = parts
   if (state !== 'playing' && state !== 'paused') return null
   const durationS = number(duration)
   const positionS = number(position)
   const volumeN = number(volume)
   const trackId = PID.test(id) ? id : null
+  const positive = (text: string): number | null => {
+    const value = number(text)
+    return Number.isFinite(value) && value > 0 ? value : null
+  }
   return {
     status: state,
     volume: Number.isFinite(volumeN) ? volumeN : null,
@@ -156,7 +162,8 @@ export function parseMusicState(stdout: string): MusicState | null {
       repeat: REPEATS[repeat] ?? 'off',
       liked: favorite === 'true' ? true : favorite === 'false' ? false : null,
       device: null,
-      contextUri: null
+      contextUri: null,
+      albumRef: album ? { uri: null, id: null, name: album, year: positive(year), total: positive(trackCount), number: positive(trackNumber), openUrl: null } : null
     }
   }
 }
@@ -166,8 +173,8 @@ export function parseMusicLibrary(stdout: string): MusicLibrary | null {
   if (text === 'off') return null
   const [head, lists = ''] = text.split('\u001c')
   const columns = head.split(R).map((column) => (column === '' ? [] : column.split(F)))
-  if (columns.length !== 9) return null
-  const [ids, names, artists, albums, albumArtists, discs, numbers, added, favorites] = columns
+  if (columns.length !== 11) return null
+  const [ids, names, artists, albums, albumArtists, discs, numbers, added, years, durations, favorites] = columns
   const tracks: MusicTrack[] = []
   for (let i = 0; i < ids.length; i += 1) {
     if (!PID.test(ids[i])) continue
@@ -180,6 +187,8 @@ export function parseMusicLibrary(stdout: string): MusicLibrary | null {
       disc: number(discs[i] ?? '0') || 0,
       number: number(numbers[i] ?? '0') || 0,
       added: number(added[i] ?? '0') || 0,
+      year: number(years[i] ?? '0') || 0,
+      durationMs: Math.round((number(durations[i] ?? '0') || 0) * 1000),
       favorite: favorites[i] === 'true'
     })
   }
@@ -210,8 +219,8 @@ const key = (album: string, artist: string): string => `${artist.toLowerCase()}$
 
 const albumOrder = (a: MusicTrack, b: MusicTrack): number => a.disc - b.disc || a.number - b.number || a.name.localeCompare(b.name)
 
-export function trackRowOf(track: MusicTrack): Row {
-  return { kind: 'track', id: track.id, uri: `music:track:${track.id}`, name: track.name || 'Unknown', sub: [track.artist, track.album].filter(Boolean).join(' · '), cover: `music-art:t:${track.id}` }
+export function trackRowOf(track: MusicTrack, sub = [track.artist, track.album].filter(Boolean).join(' · ')): Row {
+  return { kind: 'track', id: track.id, uri: `music:track:${track.id}`, name: track.name || 'Unknown', sub, cover: `music-art:t:${track.id}`, number: track.number || null, durationMs: track.durationMs || null, liked: track.favorite }
 }
 
 function groups(tracks: MusicTrack[]): { albums: Map<string, MusicTrack[]>; artists: Map<string, MusicTrack[]> } {
@@ -233,7 +242,14 @@ function groups(tracks: MusicTrack[]): { albums: Map<string, MusicTrack[]>; arti
 
 function albumRow(list: MusicTrack[]): Row {
   const first = [...list].sort(albumOrder)[0]
-  return { kind: 'album', id: first.id, uri: `music:album:${first.id}`, name: first.album, sub: `${first.albumArtist} · ${plural(list.length, 'song')}`, cover: `music-art:t:${first.id}` }
+  const year = list.map((track) => track.year).find((value) => value > 0) ?? null
+  return { kind: 'album', id: first.id, uri: `music:album:${first.id}`, name: first.album, sub: first.albumArtist, cover: `music-art:t:${first.id}`, year, count: list.length, addedAt: Math.max(...list.map((track) => track.added)) }
+}
+
+export function albumRowFor(library: MusicLibrary, trackId: string): Row | null {
+  const seed = library.tracks.find((track) => track.id === trackId)
+  if (!seed || !seed.album) return null
+  return albumRow(albumTracks(library, seed))
 }
 
 function artistRow(list: MusicTrack[]): Row {
@@ -244,11 +260,8 @@ function artistRow(list: MusicTrack[]): Row {
 export function musicLibraryView(library: MusicLibrary): LibraryView {
   const { albums, artists } = groups(library.tracks)
   const favorites = library.tracks.filter((track) => track.favorite).length
-  const made: Row[] = [
-    { kind: 'liked', id: 'liked', uri: 'music:liked:all', name: 'Favourite Songs', sub: plural(favorites, 'song'), cover: null },
-    { kind: 'playlist', id: 'recent', uri: 'music:recent:all', name: 'Recently Added', sub: 'Your newest albums', cover: null }
-  ]
-  const albumRows = [...albums.values()].map(albumRow).sort((a, b) => a.name.localeCompare(b.name))
+  const made: Row[] = [{ kind: 'liked', id: 'liked', uri: 'music:liked:all', name: 'Favourite Songs', sub: plural(favorites, 'song'), cover: null }]
+  const albumRows = [...albums.values()].map(albumRow).sort((a, b) => (b.addedAt ?? 0) - (a.addedAt ?? 0) || a.name.localeCompare(b.name))
   const artistRows = [...artists.values()].map(artistRow).sort((a, b) => a.name.localeCompare(b.name))
   const playlists: Row[] = library.playlists.map((p) => ({ kind: 'playlist', id: p.id, uri: `music:playlist:${p.id}`, name: p.name, sub: plural(p.count, 'song'), cover: p.count > 0 ? `music-art:p:${p.id}` : null }))
   return { made, playlists, artists: artistRows, albums: albumRows, needsReauth: false, message: null, savedAt: null }
@@ -256,22 +269,10 @@ export function musicLibraryView(library: MusicLibrary): LibraryView {
 
 export function musicTracks(library: MusicLibrary, kind: string, id: string): ListView | null {
   const byId = library.tracks.find((track) => track.id === id)
-  if (kind === 'liked') return { rows: library.tracks.filter((track) => track.favorite).slice(0, LIST_MAX).map(trackRowOf), message: null }
-  if (kind === 'playlist' && id === 'recent') {
-    const seen = new Set<string>()
-    const rows: Row[] = []
-    for (const track of [...library.tracks].sort((a, b) => b.added - a.added)) {
-      const k = key(track.album, track.albumArtist)
-      if (!track.album || seen.has(k)) continue
-      seen.add(k)
-      rows.push(albumRow(library.tracks.filter((other) => key(other.album, other.albumArtist) === k)))
-      if (rows.length >= 30) break
-    }
-    return { rows, message: null }
-  }
+  if (kind === 'liked') return { rows: library.tracks.filter((track) => track.favorite).slice(0, LIST_MAX).map((track) => trackRowOf(track)), message: null }
   if (!byId) return null
-  if (kind === 'album') return { rows: albumTracks(library, byId).map(trackRowOf), message: null }
-  if (kind === 'artist') return { rows: artistTracks(library, byId).slice(0, LIST_MAX).map(trackRowOf), message: null }
+  if (kind === 'album') return { rows: albumTracks(library, byId).map((track) => trackRowOf(track, track.artist)), message: null }
+  if (kind === 'artist') return { rows: artistTracks(library, byId).slice(0, LIST_MAX).map((track) => trackRowOf(track)), message: null }
   return null
 }
 
@@ -290,7 +291,7 @@ export function musicSearch(library: MusicLibrary, query: string): SearchView {
   const view = musicLibraryView(library)
   const has = (text: string): boolean => text.toLowerCase().includes(q)
   return {
-    songs: library.tracks.filter((track) => has(track.name) || has(track.artist)).slice(0, 8).map(trackRowOf),
+    songs: library.tracks.filter((track) => has(track.name) || has(track.artist)).slice(0, 8).map((track) => trackRowOf(track)),
     artists: view.artists.filter((row) => has(row.name)).slice(0, 5),
     albums: view.albums.filter((row) => has(row.name) || has(row.sub)).slice(0, 5),
     playlists: view.playlists.filter((row) => has(row.name)).slice(0, 5),
@@ -335,7 +336,7 @@ export function musicCommand(command: Command): string[] | null {
 
 const KEEP_FOCUS_AFTER = ['-e', 'delay 0.4', '-e', 'tell application prior to activate']
 
-function playIds(ids: string[], start: number): string[] {
+function playIds(ids: string[], start: number, shuffle: boolean): string[] {
   const list = `{${ids.map(quote).join(', ')}}`
   return [
     '-e', 'set prior to path to frontmost application as text',
@@ -346,18 +347,20 @@ function playIds(ids: string[], start: number): string[] {
     '-e', `repeat with i in ${list}`,
     '-e', 'duplicate (first track of library playlist 1 whose persistent ID is (contents of i)) to p',
     '-e', 'end repeat',
+    '-e', `set shuffle enabled to ${shuffle}`,
     '-e', `play track ${start + 1} of p`,
     '-e', 'end tell',
     ...KEEP_FOCUS_AFTER
   ]
 }
 
-export function musicPlay(library: MusicLibrary | null, contextUri: string, offsetUri?: string): string[] | null {
+export function musicPlay(library: MusicLibrary | null, contextUri: string, offsetUri?: string, shuffle = false): string[] | null {
   const [, kind, id] = contextUri.split(':')
   const offset = offsetUri?.split(':')[2]
+  const mode = ['-e', `set shuffle enabled to ${shuffle}`]
   if (kind === 'playlist' && PID.test(id)) {
     const target = offset && PID.test(offset) ? `(first track of p whose persistent ID is ${quote(offset)})` : 'p'
-    return ['-e', `tell application "Music"`, '-e', `set p to (first user playlist whose persistent ID is ${quote(id)})`, '-e', `play ${target}`, '-e', 'end tell']
+    return ['-e', `tell application "Music"`, '-e', `set p to (first user playlist whose persistent ID is ${quote(id)})`, ...mode, '-e', `play ${target}`, '-e', 'end tell']
   }
   if (kind === 'track' && PID.test(id)) return tell(`play (first track of library playlist 1 whose persistent ID is ${quote(id)})`)
   if (!library) return null
@@ -369,5 +372,5 @@ export function musicPlay(library: MusicLibrary | null, contextUri: string, offs
   tracks = tracks.slice(0, LIST_MAX)
   if (tracks.length === 0) return null
   const start = Math.max(0, tracks.findIndex((track) => track.id === offset))
-  return playIds(tracks.map((track) => track.id), start)
+  return playIds(tracks.map((track) => track.id), start, shuffle)
 }

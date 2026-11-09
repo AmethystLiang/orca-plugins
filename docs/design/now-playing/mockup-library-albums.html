@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Design options: Now Playing albums</title>
+<style>
+:root {
+  --app-bg: #1c1c1f;
+  --app-fg: #e6e6e6;
+  --app-muted: #8a8a8a;
+  --app-border: #2a2a2e;
+  --app-accent: #5fbf7f;
+  --app-hover: rgba(255,255,255,0.06);
+  --app-chip: rgba(255,255,255,0.08);
+  --app-track: rgba(255,255,255,0.14);
+  --app-radius: 10px;
+  --app-font: 13px/1.35 system-ui, -apple-system, sans-serif;
+
+  --doc-bg: #f1efe9;
+  --doc-fg: #2b2a27;
+  --doc-muted: #8a877f;
+  --doc-pick: #16a34a;
+  --doc-font: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --doc-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --doc-surface: #ffffff;
+  --doc-line: #0002;
+  --doc-shadow: #0001;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --doc-bg: #161513;
+    --doc-fg: #e9e6df;
+    --doc-muted: #8f8b82;
+    --doc-pick: #22c55e;
+    --doc-surface: #211f1c;
+    --doc-line: #fff2;
+    --doc-shadow: #0006;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; padding: 24px 24px 220px; background: var(--doc-bg); color: var(--doc-fg); font: 14px/1.4 var(--doc-font); }
+header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 20px; }
+header h1 { font-size: 20px; margin: 0; }
+.round { font: 600 11px var(--doc-mono); background: var(--doc-fg); color: var(--doc-bg); padding: 3px 8px; border-radius: 99px; }
+.ledger { margin: 0 0 24px; padding: 10px 14px; border-left: 3px solid var(--doc-pick); background: var(--doc-surface); font-size: 13px; columns: 2; column-gap: 24px; }
+.ledger div { break-inside: avoid; }
+.ledger div::before { content: "\2713  "; color: var(--doc-pick); font-weight: 700; }
+.diag { margin: 0 0 32px; padding: 10px 14px; border-left: 3px solid #d97706; background: var(--doc-surface); font-size: 13px; max-width: 760px; }
+.diag b { display: block; margin-bottom: 4px; }
+.diag ul { margin: 0; padding-left: 18px; }
+.diag li { margin: 2px 0; }
+.diag .flag { color: #d97706; font-weight: 700; }
+.diag code { font: 12px var(--doc-mono); }
+.issue { margin: 0 0 40px; }
+.issue h2 { font-size: 16px; margin: 0 0 4px; }
+.issue h2 .num { font-family: var(--doc-mono); color: var(--doc-muted); margin-right: 6px; }
+.said { color: var(--doc-muted); font-size: 12px; margin: 0 0 10px; }
+.said::before { content: "you: "; font-weight: 600; }
+.view { font-size: 12px; margin: 6px 0 0; color: var(--doc-muted); }
+.view::before { content: "my view: "; font-weight: 600; }
+.row { display: flex; gap: 16px; overflow-x: auto; padding: 6px 4px 10px; align-items: flex-start; }
+.col { flex: 0 0 auto; position: relative; border-radius: 12px; padding: 8px; outline: 2px solid transparent; transition: outline-color .12s; }
+.col[data-opt] { cursor: pointer; }
+.col[data-opt]:hover { outline-color: var(--doc-line); }
+.col.picked { outline: 3px solid var(--doc-pick); background: color-mix(in srgb, var(--doc-pick) 8%, transparent); }
+.tick { display: none; position: absolute; top: -8px; right: -8px; width: 24px; height: 24px; border-radius: 50%; background: var(--doc-pick); color: #fff; font: 700 14px/24px var(--doc-font); text-align: center; }
+.col.picked .tick { display: block; }
+.cap { margin-top: 8px; font-size: 13px; max-width: 340px; }
+.cap .pick { font: 700 12px var(--doc-mono); background: var(--doc-fg); color: var(--doc-bg); padding: 1px 6px; border-radius: 4px; margin-right: 6px; }
+.cap .cost { display: block; color: var(--doc-muted); font-size: 12px; }
+.now .cap .pick, .state .cap .pick { background: var(--doc-muted); }
+.compo h2 { font-size: 16px; margin: 24px 0 4px; }
+textarea.notes { display: block; width: 100%; max-width: 760px; min-height: 40px; margin-top: 6px; padding: 8px; font: 13px var(--doc-font); border: 1px solid var(--doc-line); border-radius: 6px; background: var(--doc-surface); color: var(--doc-fg); resize: vertical; }
+details.archive { margin: 40px 0; color: var(--doc-muted); font-size: 13px; }
+details.archive pre { font: 12px var(--doc-mono); white-space: pre-wrap; }
+#manual { margin-top: 48px; padding: 16px; background: var(--doc-surface); border: 1px dashed var(--doc-line); border-radius: 10px; max-width: 760px; }
+#manual h3 { margin: 0 0 8px; font-size: 14px; }
+#manual textarea { width: 100%; min-height: 90px; font: 13px var(--doc-mono); padding: 8px; border: 1px solid var(--doc-line); border-radius: 6px; background: var(--doc-bg); color: var(--doc-fg); }
+#legend { font: 12px var(--doc-mono); color: var(--doc-muted); margin: 10px 0 0; white-space: pre-wrap; user-select: all; }
+#bar { position: fixed; left: 0; right: 0; bottom: 0; background: #1c1b19f2; color: #eee; padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; font-size: 12px; z-index: 10; }
+#bar .grp { display: flex; gap: 4px; align-items: center; }
+#bar .grp b { font-family: var(--doc-mono); color: #aaa; margin-right: 2px; }
+#bar button { font: 600 12px var(--doc-mono); border: 1px solid #555; background: #2a2926; color: #ddd; padding: 3px 8px; border-radius: 5px; cursor: pointer; }
+#bar button.on { background: var(--doc-pick); border-color: var(--doc-pick); color: #fff; }
+#bar .actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+#bar input#line { width: 260px; font: 12px var(--doc-mono); background: #000; color: #fff; border: 1px solid #555; border-radius: 5px; padding: 4px 6px; }
+#bar #copy { background: #fff; color: #111; border-color: #fff; }
+#count { font-family: var(--doc-mono); color: #aaa; }
+#toast { color: #8f8; min-width: 60px; }
+
+/* ---------- Now Playing panel, pinned dark ---------- */
+.screen { background: var(--app-bg); color: var(--app-fg); font: var(--app-font); border: 1px solid var(--app-border); border-radius: var(--app-radius); overflow: hidden; box-shadow: 0 6px 24px var(--doc-shadow); width: 340px; height: 560px; display: flex; flex-direction: column; position: relative; }
+.screen.music { --app-accent: #fa2d48; }
+.screen.music .dot { background: #fa2d48; }
+.m { color: var(--app-muted); } .sm { font-size: 11.5px; } .b { font-weight: 600; }
+.clip { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; min-width: 0; }
+.ic { width: 16px; height: 16px; flex: none; display: inline-block; }
+.ic svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; display: block; }
+.ic.f svg { fill: currentColor; stroke: none; }
+.mp { padding: 12px 12px 4px; display: flex; flex-direction: column; gap: 8px; background: linear-gradient(180deg, var(--tint, transparent) 0%, var(--tint, transparent) 30%, transparent 100%); flex: none; position: relative; }
+.mp::after { content: ''; height: 1px; margin: 6px 4px 0; background: var(--app-chip); }
+.mp .meta { min-width: 0; flex: 1; }
+.mp .title { font-size: 15px; font-weight: 600; }
+.heart { margin-left: auto; color: var(--app-accent); }
+.bar { height: 4px; border-radius: 2px; background: var(--app-track); position: relative; }
+.bar i { position: absolute; inset: 0 auto 0 0; width: 38%; border-radius: 2px; background: var(--app-fg); }
+.times { display: flex; justify-content: space-between; font-size: 10.5px; margin-top: 3px; color: var(--app-muted); }
+.ctrls { display: flex; align-items: center; justify-content: center; gap: 6px; position: relative; }
+.btn { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 6px; flex: none; }
+.btn.on { color: #5fbf7f; }
+.btn.play { width: 34px; height: 34px; border-radius: 50%; background: var(--app-fg); color: var(--app-bg); }
+.btn.play .ic { width: 14px; height: 14px; }
+.side { position: absolute; color: var(--app-accent); }
+.side.l { left: 0; } .side.r { right: 0; }
+.tabs { display: flex; gap: 2px; background: var(--app-chip); border-radius: 6px; padding: 2px; margin: 6px 12px 0; flex: none; }
+.tabs span { flex: 1; text-align: center; padding: 4px 0; font-size: 11.5px; border-radius: 4px; color: var(--app-muted); }
+.tabs span.on { background: var(--app-track); color: var(--app-fg); }
+.searchbox { margin: 8px 12px 0; display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 6px; background: var(--app-chip); color: var(--app-muted); font-size: 12.5px; flex: none; }
+.list { padding: 6px 12px 12px; display: flex; flex-direction: column; gap: 2px; flex: 1; min-height: 0; overflow-y: auto; }
+.item { display: flex; align-items: center; gap: 8px; padding: 4px; border-radius: 5px; width: 100%; cursor: default; flex: none; }
+.item:hover { background: var(--app-hover); }
+.item .t { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.item .act { opacity: 0; margin-left: auto; } .item:hover .act { opacity: 1; }
+.item.now .t > span:first-child { color: #5fbf7f; }
+.item .dur { font-size: 11px; color: var(--app-muted); min-width: 30px; text-align: right; }
+.item .num { width: 18px; text-align: right; font-size: 11.5px; color: var(--app-muted); flex: none; }
+.item.now .num { color: #5fbf7f; }
+.item .fav { width: 12px; height: 12px; color: var(--app-accent); }
+.item .fav.off { opacity: 0; } .item:hover .fav.off { opacity: .35; }
+.art { width: 32px; height: 32px; border-radius: 4px; flex: none; background: var(--app-chip); }
+.art.round { border-radius: 50%; }
+.art.special { display: inline-flex; align-items: center; justify-content: center; color: #fff; }
+.art.special .ic { width: 15px; height: 15px; }
+.art.liked { background: linear-gradient(135deg, #4c1d95, #a5b4fc); }
+.music .art.liked { background: linear-gradient(135deg, #fb5c74, #fa233b); }
+.art.dj { background: linear-gradient(135deg, #1d4ed8, #22d3ee); }
+.art.recent { background: linear-gradient(135deg, #64748b, #1e293b); }
+.sec { font-size: 10.5px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; color: var(--app-muted); margin: 8px 2px 2px; display: flex; align-items: center; gap: 6px; flex: none; }
+.sec .cnt { font-weight: 500; opacity: .7; }
+.more { margin: 2px 4px 4px; font-size: 11px; color: var(--app-muted); flex: none; }
+.foot { padding: 7px 12px 8px; display: flex; align-items: center; gap: 6px; border-top: 1px solid var(--app-track); font-size: 11px; color: var(--app-muted); flex: none; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: #1db954; }
+.foot .sep { opacity: .6; } .foot .r { margin-left: auto; }
+
+/* fake covers */
+.cv { background-size: cover; position: relative; overflow: hidden; }
+.cv::after { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at 62% 38%, rgba(255,255,255,.35), transparent 42%); }
+.c1 { background: linear-gradient(135deg,#f97316,#7c2d12); }
+.c2 { background: linear-gradient(135deg,#ec4899,#831843); }
+.c3 { background: linear-gradient(135deg,#3b82f6,#1e3a8a); }
+.c4 { background: linear-gradient(135deg,#22c55e,#14532d); }
+.c5 { background: linear-gradient(135deg,#a855f7,#3b0764); }
+.c6 { background: linear-gradient(135deg,#14b8a6,#134e4a); }
+.c7 { background: linear-gradient(135deg,#eab308,#713f12); }
+.c8 { background: linear-gradient(135deg,#94a3b8,#1e293b); }
+.c9 { background: linear-gradient(135deg,#f43f5e,#4c0519); }
+.c10 { background: linear-gradient(135deg,#38bdf8,#1e3a8a); }
+.cv.empty { background: #121214; display: flex; align-items: center; justify-content: center; color: #6b6b70; }
+.cv.empty::after { display: none; }
+.cv.empty .ic { width: 22px; height: 22px; }
+
+/* composed pieces */
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 8px; padding: 2px; flex: none; }
+.tile { display: flex; flex-direction: column; gap: 4px; min-width: 0; border-radius: 6px; padding: 3px; }
+.tile:hover { background: var(--app-hover); }
+.tile .cv { width: 100%; aspect-ratio: 1; border-radius: 5px; }
+.tile .n { font-size: 11.5px; font-weight: 500; }
+.tile .s { font-size: 10.5px; color: var(--app-muted); }
+.alb { flex: none; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 4px; padding: 8px 4px 10px; }
+.alb .cv { width: 132px; height: 132px; border-radius: 8px; box-shadow: 0 8px 22px rgba(0,0,0,.4); }
+.alb .n { font-size: 15px; font-weight: 600; margin-top: 6px; }
+.pills { display: flex; gap: 8px; margin-top: 8px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 16px; font-size: 12px; font-weight: 600; background: var(--app-chip); }
+.pill.pri { background: var(--app-fg); color: var(--app-bg); }
+.pill .ic { width: 13px; height: 13px; }
+.ctx { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 6px; background: var(--app-chip); margin-top: 2px; font-size: 11.5px; cursor: default; }
+.ctx:hover { background: var(--app-track); }
+.ctx .art { width: 22px; height: 22px; border-radius: 3px; }
+.ctx .ic { margin-left: auto; width: 12px; height: 12px; color: var(--app-muted); }
+.ctx .prog { display: flex; gap: 2px; margin-left: 4px; }
+.ctx .prog i { width: 6px; height: 3px; border-radius: 1px; background: var(--app-track); }
+.ctx .prog i.d { background: #5fbf7f; }
+.ctx .pillsm { margin-left: auto; padding: 2px 8px; border-radius: 10px; background: var(--app-accent); color: #fff; font-size: 10.5px; font-weight: 600; }
+.big-cover { width: 100%; aspect-ratio: 1; border-radius: 6px; box-shadow: 0 6px 18px rgba(0,0,0,.3); }
+.headrow { display: flex; gap: 10px; align-items: center; }
+.mini { display: none; width: 56px; height: 56px; border-radius: 4px; flex: none; cursor: pointer; }
+.corner { position: absolute; top: 18px; right: 20px; width: 22px; height: 22px; border-radius: 50%; background: rgba(0,0,0,.45); color: #fff; display: inline-flex; align-items: center; justify-content: center; opacity: 0; transition: opacity .15s; cursor: pointer; }
+.corner .ic { width: 12px; height: 12px; }
+.mp:hover .corner, .mp.hovered .corner { opacity: 1; }
+.mp[data-size="small"] .big-cover, .mp[data-size="small"] .corner { display: none; }
+.mp[data-size="small"] .mini { display: block; }
+.live { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; color: var(--app-accent); font-weight: 600; letter-spacing: .04em; }
+.live::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--app-accent); }
+.statebadge { position: absolute; top: 8px; left: 8px; font: 600 10px var(--doc-mono); background: #d97706; color: #fff; padding: 2px 6px; border-radius: 4px; z-index: 2; }
+.hl { outline: 2px dashed #d97706; outline-offset: 2px; border-radius: 6px; }
+</style>
+</head>
+<body data-key="design-options:now-playing-albums:r3">
+
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="i-play" viewBox="0 0 24 24"><polygon points="7 4 20 12 7 20 7 4"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></symbol>
+  <symbol id="i-prev" viewBox="0 0 24 24"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5"/></symbol>
+  <symbol id="i-next" viewBox="0 0 24 24"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></symbol>
+  <symbol id="i-shuffle" viewBox="0 0 24 24"><path d="M16 3h5v5"/><path d="M4 20 21 3"/><path d="M21 16v5h-5"/><path d="M15 15l6 6"/><path d="M4 4l5 5"/></symbol>
+  <symbol id="i-repeat" viewBox="0 0 24 24"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-speaker" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2"/><circle cx="12" cy="14" r="4"/><line x1="12" y1="6" x2="12.01" y2="6"/></symbol>
+  <symbol id="i-laptop" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M2 20h20"/></symbol>
+  <symbol id="i-heart" viewBox="0 0 24 24"><path d="M19 14c1.5-1.5 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.8 0-3 .5-4.5 2-1.5-1.5-2.7-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4 3 5.5l7 7Z"/></symbol>
+  <symbol id="i-addq" viewBox="0 0 24 24"><path d="M3 6h13M3 12h13M3 18h9"/><path d="M19 15v6M16 18h6"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><polyline points="9 6 15 12 9 18"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></symbol>
+  <symbol id="i-open" viewBox="0 0 24 24"><path d="M7 17 17 7"/><path d="M8 7h9v9"/></symbol>
+  <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></symbol>
+  <symbol id="i-shrink" viewBox="0 0 24 24"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></symbol>
+</svg>
+
+<header>
+  <span class="round">ROUND 3 · COMPOSITION</span>
+  <h1>Everything together, one collision left</h1>
+</header>
+
+<div class="ledger">
+  <div>1A Albums in the Library as a cover grid</div>
+  <div>2A Album page: big cover, year · songs · length, Play and Shuffle, numbered songs</div>
+  <div>3C Spotify: Albums tab (Library · Albums · Queue)</div>
+  <div>4B Album strip under the controls, "4 of 12"</div>
+  <div>5C Apple Music: no tabs, grid high in Library</div>
+  <div>6C Recently Added row stays</div>
+  <div>7A Hearts on favourite songs</div>
+  <div>8B Radio / streamed: album from iTunes, Open in Music</div>
+  <div>9B Shrink button on hover, small cover grows on click</div>
+</div>
+
+<div class="diag">
+  <b>What composition changed</b>
+  <ul>
+    <li><span class="flag">6C bends.</span> It was drawn as "jumps to the Albums tab", but 5C gives Music no tabs. Where the row goes is issue 10 below.</li>
+    <li>1A + 3C on Spotify: the Library grid shows 6, and "Show all 23" switches to the Albums tab instead of expanding in place.</li>
+    <li>1A + 5C on Music: the grid sits right after Made for you and "Show all 31" expands in place, newest first.</li>
+    <li>4B + 2A: clicking the strip opens the album page. 4B + 8B: on Spotify every song has an album, so the strip always counts; the iTunes fallback is Music only.</li>
+    <li>7A on Spotify costs one request per opened album (50 ids at once). Included on both apps.</li>
+    <li>9B + Nothing playing: the empty square obeys the same remembered size, so shrink it once and it stays small.</li>
+  </ul>
+</div>
+
+<div class="compo">
+<h2>The whole surface</h2>
+<div class="row">
+
+  <div class="col state">
+    <div class="screen" style="height:820px">
+      <div class="mp hovered" data-demo="cover" data-size="big" style="--tint:hsla(18,75%,45%,.5)">
+        <div class="big-cover cv c1"></div>
+        <span class="corner" title="Smaller cover"><span class="ic"><svg><use href="#i-shrink"/></svg></span></span>
+        <div class="headrow"><div class="mini cv c1" title="Bigger cover"></div><div class="meta"><div class="title clip">Paper Lanterns</div><div class="m clip">The Night Ferries</div><div class="m sm clip">Harbor Lights</div></div><span class="ic f heart"><svg><use href="#i-heart"/></svg></span></div>
+        <div><div class="bar"><i></i></div><div class="times"><span>1:38</span><span>4:03</span></div></div>
+        <div class="ctrls"><span class="btn side l ic"><svg><use href="#i-open"/></svg></span><span class="btn on ic"><svg><use href="#i-shuffle"/></svg></span><span class="btn ic"><svg><use href="#i-prev"/></svg></span><span class="btn play"><span class="ic f"><svg><use href="#i-pause"/></svg></span></span><span class="btn ic"><svg><use href="#i-next"/></svg></span><span class="btn on ic"><svg><use href="#i-repeat"/></svg></span><span class="btn side r ic"><svg><use href="#i-laptop"/></svg></span></div>
+        <div class="ctx"><span class="art cv c1"></span><span class="clip">Harbor Lights</span><span class="m">· 4 of 12</span><span class="prog"><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="ic"><svg><use href="#i-right"/></svg></span></div>
+      </div>
+      <div class="tabs"><span class="on">Library</span><span>Albums</span><span>Queue</span></div>
+      <div class="searchbox"><span class="ic"><svg><use href="#i-search"/></svg></span>Search Spotify</div>
+      <div class="list">
+        <div class="sec">Made for you</div>
+        <div class="item"><span class="art special liked"><span class="ic f"><svg><use href="#i-heart"/></svg></span></span><div class="t"><span class="clip">Liked Songs</span><span class="m sm clip">812 songs</span></div></div>
+        <div class="item"><span class="art special dj"><span class="ic"><svg><use href="#i-music"/></svg></span></span><div class="t"><span class="clip">DJ</span><span class="m sm clip">Plays in the Spotify app on this Mac</span></div></div>
+        <div class="sec">Albums<span class="cnt">23</span></div>
+        <div class="grid">
+          <div class="tile"><div class="cv c1"></div><span class="n clip">Harbor Lights</span><span class="s clip">The Night Ferries</span></div>
+          <div class="tile"><div class="cv c9"></div><span class="n clip">Second Wind</span><span class="s clip">June &amp; the Pines</span></div>
+          <div class="tile"><div class="cv c7"></div><span class="n clip">Lanterns</span><span class="s clip">June &amp; the Pines</span></div>
+          <div class="tile"><div class="cv c3"></div><span class="n clip">Northbound</span><span class="s clip">Atlas Avenue</span></div>
+          <div class="tile"><div class="cv c6"></div><span class="n clip">Low Tide Radio</span><span class="s clip">Marigold Static</span></div>
+          <div class="tile"><div class="cv c2"></div><span class="n clip">Glass Houses</span><span class="s clip">The Night Ferries</span></div>
+        </div>
+        <div class="more">Show all 23 →</div>
+        <div class="sec">Recently played</div>
+        <div class="item"><span class="art cv c1"></span><div class="t"><span class="clip">Paper Lanterns</span><span class="m sm clip">The Night Ferries</span></div></div>
+        <div class="sec">Playlists</div>
+        <div class="item"><span class="art cv c5"></span><div class="t"><span class="clip">Coding late</span><span class="m sm clip">You · 64 songs</span></div></div>
+      </div>
+      <div class="foot"><span class="dot"></span>Spotify<span class="sep">·</span>Switch to Apple Music<span class="r">Sign out</span></div>
+    </div>
+    <div class="cap"><span class="pick">SPOTIFY</span>Library, hovering the cover<span class="cost">shrink button showing; click it or the small cover to toggle</span></div>
+  </div>
+
+  <div class="col state">
+    <div class="screen" style="height:820px">
+      <div class="mp" style="--tint:hsla(18,75%,45%,.5)">
+        <div class="headrow"><div class="mini cv c1" style="display:block"></div><div class="meta"><div class="title clip">Paper Lanterns</div><div class="m clip">The Night Ferries</div><div class="m sm clip">Harbor Lights</div></div><span class="ic f heart"><svg><use href="#i-heart"/></svg></span></div>
+        <div><div class="bar"><i></i></div><div class="times"><span>1:38</span><span>4:03</span></div></div>
+        <div class="ctrls"><span class="btn side l ic"><svg><use href="#i-open"/></svg></span><span class="btn on ic"><svg><use href="#i-shuffle"/></svg></span><span class="btn ic"><svg><use href="#i-prev"/></svg></span><span class="btn play"><span class="ic f"><svg><use href="#i-pause"/></svg></span></span><span class="btn ic"><svg><use href="#i-next"/></svg></span><span class="btn on ic"><svg><use href="#i-repeat"/></svg></span><span class="btn side r ic"><svg><use href="#i-laptop"/></svg></span></div>
+        <div class="ctx"><span class="art cv c1"></span><span class="clip">Harbor Lights</span><span class="m">· 4 of 12</span><span class="prog"><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="ic"><svg><use href="#i-right"/></svg></span></div>
+      </div>
+      <div class="tabs"><span>Library</span><span class="on">Albums</span><span>Queue</span></div>
+      <div class="searchbox"><span class="ic"><svg><use href="#i-search"/></svg></span>Search albums</div>
+      <div class="list">
+        <div class="sec">23 albums<span class="cnt">newest first</span></div>
+        <div class="grid">
+          <div class="tile"><div class="cv c1"></div><span class="n clip">Harbor Lights</span><span class="s clip">The Night Ferries</span></div>
+          <div class="tile"><div class="cv c9"></div><span class="n clip">Second Wind</span><span class="s clip">June &amp; the Pines</span></div>
+          <div class="tile"><div class="cv c7"></div><span class="n clip">Lanterns</span><span class="s clip">June &amp; the Pines</span></div>
+          <div class="tile"><div class="cv c3"></div><span class="n clip">Northbound</span><span class="s clip">Atlas Avenue</span></div>
+          <div class="tile"><div class="cv c6"></div><span class="n clip">Low Tide Radio</span><span class="s clip">Marigold Static</span></div>
+          <div class="tile"><div class="cv c2"></div><span class="n clip">Glass Houses</span><span class="s clip">The Night Ferries</span></div>
+          <div class="tile"><div class="cv c8"></div><span class="n clip">Switchback</span><span class="s clip">Eleven Rivers</span></div>
+          <div class="tile"><div class="cv c4"></div><span class="n clip">Porchlight</span><span class="s clip">Hollow Creek</span></div>
+          <div class="tile"><div class="cv c5"></div><span class="n clip">Copper Wire</span><span class="s clip">June &amp; the Pines</span></div>
+          <div class="tile"><div class="cv c10"></div><span class="n clip">Tidewater</span><span class="s clip">Sea Lanes</span></div>
+          <div class="tile"><div class="cv c7"></div><span class="n clip">Amber</span><span class="s clip">Orchard Street</span></div>
+          <div class="tile"><div class="cv c2"></div><span class="n clip">Sunday Porch</span><span class="s clip">Hollow Creek</span></div>
+        </div>
+      </div>
+      <div class="foot"><span class="dot"></span>Spotify<span class="sep">·</span>Switch to Apple Music<span class="r">Sign out</span></div>
+    </div>
+    <div class="cap"><span class="pick">SPOTIFY</span>Albums tab, cover shrunk<span class="cost">search filters this grid; sort is newest first, no control</span></div>
+  </div>
+
+  <div class="col state">
+    <div class="screen" style="height:820px">
+      <div class="mp" style="--tint:hsla(18,75%,45%,.5)">
+        <div class="headrow"><div class="mini cv c1" style="display:block"></div><div class="meta"><div class="title clip">Paper Lanterns</div><div class="m clip">The Night Ferries</div><div class="m sm clip">Harbor Lights</div></div><span class="ic f heart"><svg><use href="#i-heart"/></svg></span></div>
+        <div><div class="bar"><i></i></div><div class="times"><span>1:38</span><span>4:03</span></div></div>
+        <div class="ctrls"><span class="btn side l ic"><svg><use href="#i-open"/></svg></span><span class="btn on ic"><svg><use href="#i-shuffle"/></svg></span><span class="btn ic"><svg><use href="#i-prev"/></svg></span><span class="btn play"><span class="ic f"><svg><use href="#i-pause"/></svg></span></span><span class="btn ic"><svg><use href="#i-next"/></svg></span><span class="btn on ic"><svg><use href="#i-repeat"/></svg></span><span class="btn side r ic"><svg><use href="#i-laptop"/></svg></span></div>
+        <div class="ctx" style="background:var(--app-track)"><span class="art cv c1"></span><span class="clip">Harbor Lights</span><span class="m">· 4 of 12</span><span class="prog"><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="ic"><svg><use href="#i-right"/></svg></span></div>
+      </div>
+      <div class="tabs"><span>Library</span><span class="on">Albums</span><span>Queue</span></div>
+      <div class="searchbox"><span class="ic"><svg><use href="#i-search"/></svg></span>Search albums</div>
+      <div class="list">
+        <div class="item" style="padding:2px 0"><span class="btn ic"><svg><use href="#i-back"/></svg></span><span class="m sm">Albums</span></div>
+        <div class="alb">
+          <div class="cv c1"></div>
+          <div class="n">Harbor Lights</div>
+          <div class="m">The Night Ferries</div>
+          <div class="m sm">2024 · 12 songs · 48 min</div>
+          <div class="pills"><span class="pill pri"><span class="ic f"><svg><use href="#i-play"/></svg></span>Play</span><span class="pill"><span class="ic"><svg><use href="#i-shuffle"/></svg></span>Shuffle</span></div>
+        </div>
+        <div class="item"><span class="num">1</span><div class="t"><span class="clip">Harbor Lights</span></div><span class="act btn ic"><svg><use href="#i-addq"/></svg></span><span class="ic f fav"><svg><use href="#i-heart"/></svg></span><span class="dur">3:42</span></div>
+        <div class="item"><span class="num">2</span><div class="t"><span class="clip">Low Tide</span></div><span class="act btn ic"><svg><use href="#i-addq"/></svg></span><span class="ic f fav off"><svg><use href="#i-heart"/></svg></span><span class="dur">4:10</span></div>
+        <div class="item"><span class="num">3</span><div class="t"><span class="clip">Ferry Crossing</span></div><span class="act btn ic"><svg><use href="#i-addq"/></svg></span><span class="ic f fav off"><svg><use href="#i-heart"/></svg></span><span class="dur">2:58</span></div>
+        <div class="item now"><span class="num">4</span><div class="t"><span class="clip">Paper Lanterns</span></div><span class="act btn ic"><svg><use href="#i-addq"/></svg></span><span class="ic f fav"><svg><use href="#i-heart"/></svg></span><span class="dur">4:03</span></div>
+        <div class="item"><span class="num">5</span><div class="t"><span class="clip">Salt &amp; Rope</span><span class="m sm clip">feat. Hollow Creek</span></div><span class="act btn ic"><svg><use href="#i-addq"/></svg></span><span class="ic f fav off"><svg><use href="#i-heart"/></svg></span><span class="dur">3:31</span></div>
+        <div class="item"><span class="num">6</span><div class="t"><span class="clip">Pier Nine</span></div><span class="act btn ic"><svg><use href="#i-addq"/></svg></span><span class="ic f fav"><svg><use href="#i-heart"/></svg></span><span class="dur">5:12</span></div>
+        <div class="item"><span class="num">7</span><div class="t"><span class="clip">Night Watch</span></div><span class="act btn ic"><svg><use href="#i-addq"/></svg></span><span class="ic f fav off"><svg><use href="#i-heart"/></svg></span><span class="dur">3:47</span></div>
+        <div class="item"><span class="num">8</span><div class="t"><span class="clip">Harbor Lights (Reprise)</span></div><span class="act btn ic"><svg><use href="#i-addq"/></svg></span><span class="ic f fav off"><svg><use href="#i-heart"/></svg></span><span class="dur">1:50</span></div>
+      </div>
+      <div class="foot"><span class="dot"></span>Spotify<span class="sep">·</span>Switch to Apple Music<span class="r">Sign out</span></div>
+    </div>
+    <div class="cap"><span class="pick">SPOTIFY</span>Album page, opened from the strip<span class="cost">hearts are Liked Songs; queue button on hover</span></div>
+  </div>
+
+  <div class="col state">
+    <div class="screen music" style="height:820px">
+      <div class="mp" style="--tint:hsla(205,70%,40%,.5)">
+        <div class="headrow"><div class="mini cv c10" style="display:block"></div><div class="meta"><div class="title clip">Blue Hour</div><div class="m clip">Sea Lanes</div><div class="m sm clip">Tidewater</div></div><span class="ic f heart"><svg><use href="#i-heart"/></svg></span></div>
+        <div><div class="bar"><i></i></div><div class="times"><span>1:38</span><span>4:03</span></div></div>
+        <div class="ctrls"><span class="btn side l ic"><svg><use href="#i-open"/></svg></span><span class="btn on ic"><svg><use href="#i-shuffle"/></svg></span><span class="btn ic"><svg><use href="#i-prev"/></svg></span><span class="btn play"><span class="ic f"><svg><use href="#i-pause"/></svg></span></span><span class="btn ic"><svg><use href="#i-next"/></svg></span><span class="btn ic"><svg><use href="#i-repeat"/></svg></span><span class="btn side r ic"><svg><use href="#i-speaker"/></svg></span></div>
+        <div class="ctx"><span class="art cv c10"></span><span class="clip">Tidewater</span><span class="m">· 2 of 14</span><span class="prog"><i class="d"></i><i class="d"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="ic"><svg><use href="#i-right"/></svg></span></div>
+      </div>
+      <div class="searchbox"><span class="ic"><svg><use href="#i-search"/></svg></span>Search your library</div>
+      <div class="list">
+        <div class="sec">Made for you</div>
+        <div class="item"><span class="art special liked"><span class="ic f"><svg><use href="#i-heart"/></svg></span></span><div class="t"><span class="clip">Favourite Songs</span><span class="m sm clip">214 songs</span></div></div>
+        <div class="item hl"><span class="art special recent"><span class="ic"><svg><use href="#i-clock"/></svg></span></span><div class="t"><span class="clip">Recently Added</span><span class="m sm clip">Your newest albums</span></div><span class="ic" style="width:12px;height:12px;color:var(--app-muted)"><svg><use href="#i-right"/></svg></span></div>
+        <div class="sec">Albums<span class="cnt">31</span></div>
+        <div class="grid">
+          <div class="tile"><div class="cv c10"></div><span class="n clip">Tidewater</span><span class="s clip">Sea Lanes</span></div>
+          <div class="tile"><div class="cv c3"></div><span class="n clip">Amber</span><span class="s clip">Orchard Street</span></div>
+          <div class="tile"><div class="cv c9"></div><span class="n clip">Second Wind</span><span class="s clip">June &amp; the Pines</span></div>
+          <div class="tile"><div class="cv c6"></div><span class="n clip">Low Tide Radio</span><span class="s clip">Marigold Static</span></div>
+          <div class="tile"><div class="cv c2"></div><span class="n clip">Glass Houses</span><span class="s clip">The Night Ferries</span></div>
+          <div class="tile"><div class="cv c7"></div><span class="n clip">Lanterns</span><span class="s clip">June &amp; the Pines</span></div>
+        </div>
+        <div class="more">Show all 31</div>
+        <div class="sec">Playlists</div>
+        <div class="item"><span class="art cv c5"></span><div class="t"><span class="clip">Focus</span><span class="m sm clip">48 songs</span></div></div>
+        <div class="item"><span class="art cv c4"></span><div class="t"><span class="clip">Kitchen</span><span class="m sm clip">31 songs</span></div></div>
+        <div class="sec">Artists</div>
+        <div class="item"><span class="art round cv c10"></span><div class="t"><span class="clip">Sea Lanes</span><span class="m sm clip">36 songs</span></div></div>
+      </div>
+      <div class="foot"><span class="dot"></span>Apple Music<span class="sep">·</span>Switch to Spotify</div>
+    </div>
+    <div class="cap"><span class="pick">MUSIC</span>Library, no tabs, grid high<span class="cost">dashed row is issue 10</span></div>
+  </div>
+
+  <div class="col state">
+    <div class="screen music" style="height:auto">
+      <div class="mp" style="--tint:hsla(345,70%,45%,.5)">
+        <div class="headrow"><div class="mini cv c9" style="display:block"></div><div class="meta"><div class="title clip">Night Swim</div><div class="m clip">Velvet Harbour</div><div class="live">Apple Music 1</div></div></div>
+        <div class="ctrls"><span class="btn side l ic"><svg><use href="#i-open"/></svg></span><span class="btn ic"><svg><use href="#i-shuffle"/></svg></span><span class="btn ic"><svg><use href="#i-prev"/></svg></span><span class="btn play"><span class="ic f"><svg><use href="#i-pause"/></svg></span></span><span class="btn ic"><svg><use href="#i-next"/></svg></span><span class="btn ic"><svg><use href="#i-repeat"/></svg></span><span class="btn side r ic"><svg><use href="#i-speaker"/></svg></span></div>
+        <div class="ctx"><span class="art cv c9"></span><span class="clip">Night Swim</span><span class="m sm">· 2022</span><span class="pillsm">Open in Music</span></div>
+      </div>
+    </div>
+    <div class="cap"><span class="pick">MUSIC</span>Radio, song not in library<span class="cost">album from iTunes; no seek bar on live radio, as today</span></div>
+  </div>
+
+  <div class="col state">
+    <div class="screen music" style="height:auto">
+      <div class="mp">
+        <div class="headrow"><div class="mini cv empty" style="display:flex"><span class="ic"><svg><use href="#i-music"/></svg></span></div><div class="meta"><div class="title">Nothing playing</div><div class="m sm">Play something in the Music app, or pick an album below.</div></div></div>
+        <div class="ctrls"><span class="btn side l ic"><svg><use href="#i-open"/></svg></span><span class="btn ic"><svg><use href="#i-shuffle"/></svg></span><span class="btn ic"><svg><use href="#i-prev"/></svg></span><span class="btn play"><span class="ic f"><svg><use href="#i-play"/></svg></span></span><span class="btn ic"><svg><use href="#i-next"/></svg></span><span class="btn ic"><svg><use href="#i-repeat"/></svg></span><span class="btn side r ic"><svg><use href="#i-speaker"/></svg></span></div>
+      </div>
+    </div>
+    <div class="cap"><span class="pick">MUSIC</span>Nothing playing, cover shrunk<span class="cost">no strip when there is nothing to point at</span></div>
+  </div>
+
+</div>
+</div>
+
+<!-- ============ ISSUE 10 ============ -->
+<section class="issue" data-issue="10">
+  <h2><span class="num">10</span>Recently Added row on Music: where does it go?</h2>
+  <p class="said">6C "jumps to the Albums tab", but 5C has no tabs</p>
+  <div class="row">
+
+    <div class="col">
+      <div class="screen music" style="height:460px">
+        <div class="searchbox"><span class="ic"><svg><use href="#i-search"/></svg></span>Search your library</div>
+        <div class="list">
+          <div class="item" style="padding:2px 0"><span class="btn ic"><svg><use href="#i-back"/></svg></span><span class="art special recent" style="width:24px;height:24px"><span class="ic" style="width:12px;height:12px"><svg><use href="#i-clock"/></svg></span></span><span class="b">Recently Added</span></div>
+          <div class="grid">
+            <div class="tile"><div class="cv c10"></div><span class="n clip">Tidewater</span><span class="s clip">Sea Lanes</span></div>
+            <div class="tile"><div class="cv c3"></div><span class="n clip">Amber</span><span class="s clip">Orchard Street</span></div>
+            <div class="tile"><div class="cv c9"></div><span class="n clip">Second Wind</span><span class="s clip">June &amp; the Pines</span></div>
+            <div class="tile"><div class="cv c6"></div><span class="n clip">Low Tide Radio</span><span class="s clip">Marigold Static</span></div>
+            <div class="tile"><div class="cv c2"></div><span class="n clip">Glass Houses</span><span class="s clip">The Night Ferries</span></div>
+            <div class="tile"><div class="cv c7"></div><span class="n clip">Lanterns</span><span class="s clip">June &amp; the Pines</span></div>
+            <div class="tile"><div class="cv c8"></div><span class="n clip">Switchback</span><span class="s clip">Eleven Rivers</span></div>
+            <div class="tile"><div class="cv c4"></div><span class="n clip">Porchlight</span><span class="s clip">Hollow Creek</span></div>
+            <div class="tile"><div class="cv c5"></div><span class="n clip">Copper Wire</span><span class="s clip">June &amp; the Pines</span></div>
+          </div>
+        </div>
+        <div class="foot"><span class="dot"></span>Apple Music<span class="sep">·</span>Switch to Spotify</div>
+      </div>
+      <div class="cap"><span class="pick">10A</span>Opens a grid page, newest first<span class="cost">same page "Show all 31" opens. Row and link lead to one place</span></div>
+    </div>
+
+    <div class="col">
+      <div class="screen music" style="height:460px">
+        <div class="searchbox"><span class="ic"><svg><use href="#i-search"/></svg></span>Search your library</div>
+        <div class="list">
+          <div class="item" style="padding:2px 0"><span class="btn ic"><svg><use href="#i-back"/></svg></span><span class="art special recent" style="width:24px;height:24px"><span class="ic" style="width:12px;height:12px"><svg><use href="#i-clock"/></svg></span></span><span class="b">Recently Added</span></div>
+          <div class="item"><span class="art cv c10"></span><div class="t"><span class="clip">Tidewater</span><span class="m sm clip">Sea Lanes · added today</span></div></div>
+          <div class="item"><span class="art cv c3"></span><div class="t"><span class="clip">Amber</span><span class="m sm clip">Orchard Street · 3d ago</span></div></div>
+          <div class="item"><span class="art cv c9"></span><div class="t"><span class="clip">Second Wind</span><span class="m sm clip">June &amp; the Pines · 1w ago</span></div></div>
+          <div class="item"><span class="art cv c6"></span><div class="t"><span class="clip">Low Tide Radio</span><span class="m sm clip">Marigold Static · 2w ago</span></div></div>
+          <div class="item"><span class="art cv c2"></span><div class="t"><span class="clip">Glass Houses</span><span class="m sm clip">The Night Ferries · 3w ago</span></div></div>
+          <div class="item"><span class="art cv c7"></span><div class="t"><span class="clip">Lanterns</span><span class="m sm clip">June &amp; the Pines · 1mo ago</span></div></div>
+          <div class="item"><span class="art cv c8"></span><div class="t"><span class="clip">Switchback</span><span class="m sm clip">Eleven Rivers · 1mo ago</span></div></div>
+        </div>
+        <div class="foot"><span class="dot"></span>Apple Music<span class="sep">·</span>Switch to Spotify</div>
+      </div>
+      <div class="cap"><span class="pick">10B</span>Opens a list with "added" dates<span class="cost">as today, plus the date. The only list of albums in the app</span></div>
+    </div>
+
+    <div class="col">
+      <div class="screen music" style="height:460px">
+        <div class="searchbox"><span class="ic"><svg><use href="#i-search"/></svg></span>Search your library</div>
+        <div class="list">
+          <div class="sec">Made for you</div>
+          <div class="item"><span class="art special liked"><span class="ic f"><svg><use href="#i-heart"/></svg></span></span><div class="t"><span class="clip">Favourite Songs</span><span class="m sm clip">214 songs</span></div></div>
+          <div class="sec">Albums<span class="cnt">31 · newest first</span></div>
+          <div class="grid">
+            <div class="tile"><div class="cv c10"></div><span class="n clip">Tidewater</span><span class="s clip">Sea Lanes</span></div>
+            <div class="tile"><div class="cv c3"></div><span class="n clip">Amber</span><span class="s clip">Orchard Street</span></div>
+            <div class="tile"><div class="cv c9"></div><span class="n clip">Second Wind</span><span class="s clip">June &amp; the Pines</span></div>
+            <div class="tile"><div class="cv c6"></div><span class="n clip">Low Tide Radio</span><span class="s clip">Marigold Static</span></div>
+            <div class="tile"><div class="cv c2"></div><span class="n clip">Glass Houses</span><span class="s clip">The Night Ferries</span></div>
+            <div class="tile"><div class="cv c7"></div><span class="n clip">Lanterns</span><span class="s clip">June &amp; the Pines</span></div>
+          </div>
+          <div class="more">Show all 31</div>
+          <div class="sec">Playlists</div>
+          <div class="item"><span class="art cv c5"></span><div class="t"><span class="clip">Focus</span><span class="m sm clip">48 songs</span></div></div>
+        </div>
+        <div class="foot"><span class="dot"></span>Apple Music<span class="sep">·</span>Switch to Spotify</div>
+      </div>
+      <div class="cap"><span class="pick">10C</span>Drop the row, the grid is already newest first<span class="cost">undoes 6C. One fewer row above the albums</span></div>
+    </div>
+
+  </div>
+  <p class="view">10A: the row keeps its promise and shares one page with "Show all".</p>
+</section>
+
+<!-- ============ ISSUE 11 ============ -->
+<section class="issue" data-issue="11" data-keep="drawn">
+  <h2><span class="num">11</span>Does the composed surface look right?</h2>
+  <div class="row">
+    <div class="col">
+      <div class="screen" style="height:120px;align-items:center;justify-content:center;font-size:15px;font-weight:600">Build it as drawn</div>
+      <div class="cap"><span class="pick">11A</span>Looks right<span class="cost">next: implement, draft PR, CI, then mark ready</span></div>
+    </div>
+    <div class="col">
+      <div class="screen" style="height:120px;align-items:center;justify-content:center;font-size:15px;font-weight:600;color:var(--app-muted)">One more fix…</div>
+      <div class="cap"><span class="pick">11B</span>With a fix<span class="cost">say what in the notes box</span></div>
+    </div>
+  </div>
+</section>
+
+<details class="archive">
+  <summary>Earlier rounds</summary>
+<pre>Round 1 (Spotify) · picked 1A 2A 3C 4B
+1 How should albums look in the Library?   1A cover grid · 1B shelf · 1C taller rows with year and length
+2 What does an opened album look like?     2A album page · 2B compact header, numbered songs · 2C cover as a banner
+3 How do you get to albums fast?           3A filter chips · 3B collapsible sections · 3C Albums tab
+4 From the song playing to its album?      4A album name is a link · 4B album strip under controls
+
+Round 2 (Apple Music + cover) · picked 5C 6C 7A 8B 9B
+5 Albums tab without Queue?                5A two tabs · 5B three tabs with Artists · 5C no tabs, grid high in Library
+6 Recently Added?                          6A drop the row, sort control · 6B recent shelf above A–Z grid · 6C keep the row, jumps to Albums tab
+7 Album page extras?                       7A hearts on favourites · 7B hearts and disc headers
+8 Strip when song not in library?          8A hides · 8B album from iTunes, Open in Music · 8C shows the source
+9 Make the cover small?                    9A click cover to toggle · 9B shrink button on hover · 9C auto plus setting</pre>
+</details>
+
+<section id="manual">
+  <h3>Manual copy</h3>
+  <textarea id="answer" readonly placeholder="Click options above. Your answer appears here."></textarea>
+  <div id="legend"></div>
+</section>
+
+<div id="bar">
+  <div id="groups" style="display:flex;flex-wrap:wrap;gap:10px 18px"></div>
+  <div class="actions">
+    <span id="count"></span>
+    <input id="line" readonly aria-label="Answer line">
+    <button id="copy">Copy my picks</button>
+    <button id="clear">Clear</button>
+    <span id="toast"></span>
+  </div>
+</div>
+
+<script>
+(function () {
+  var KEY = document.body.dataset.key || location.pathname;
+  var state = { picks: {}, notes: {} };
+  try {
+    var saved = JSON.parse(localStorage.getItem(KEY) || "{}");
+    state.picks = saved.picks || {};
+    state.notes = saved.notes || {};
+  } catch (e) {}
+
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+  function issueOf(code) { var m = /^(\d+)/.exec(code); return m ? m[1] : code; }
+
+  var issues = [];
+  var options = {};
+  var labels = {};
+  var cards = {};
+
+  document.querySelectorAll(".issue").forEach(function (sec) {
+    var id = sec.dataset.issue;
+    var title = sec.querySelector("h2");
+    labels[id] = title ? title.textContent.replace(/^\s*\d+\s*/, "").trim() : id;
+    issues.push(id);
+    options[id] = [];
+
+    sec.querySelectorAll(".col").forEach(function (col) {
+      var chip = col.querySelector(".cap .pick");
+      if (!chip) return;
+      var code = chip.textContent.trim();
+      if (!/^\d+[A-Za-z]/.test(code)) return;
+      var name = (chip.nextSibling && chip.nextSibling.textContent || "").trim();
+      col.dataset.opt = code;
+      var tick = document.createElement("span");
+      tick.className = "tick";
+      tick.textContent = "✓";
+      col.appendChild(tick);
+      col.addEventListener("click", function (ev) {
+        if (ev.target.closest("textarea, input, a, select, [data-demo]")) return;
+        choose(code);
+      });
+      cards[code] = col;
+      options[id].push({ code: code, name: name });
+    });
+
+    if (sec.dataset.keep !== "drawn") options[id].push({ code: id + "-keep", name: "keep as-is" });
+
+    var ta = document.createElement("textarea");
+    ta.className = "notes";
+    ta.dataset.issue = id;
+    ta.placeholder = "Notes on " + id + ": what's off, or what would make it the one";
+    ta.value = state.notes[id] || "";
+    ta.addEventListener("input", function () {
+      if (ta.value.trim()) state.notes[id] = ta.value; else delete state.notes[id];
+      save();
+      render();
+    });
+    sec.appendChild(ta);
+  });
+
+  var groups = document.getElementById("groups");
+  issues.forEach(function (id) {
+    var g = document.createElement("div");
+    g.className = "grp";
+    var b = document.createElement("b");
+    b.textContent = id;
+    g.appendChild(b);
+    options[id].forEach(function (o) {
+      var btn = document.createElement("button");
+      btn.dataset.code = o.code;
+      btn.title = o.name;
+      btn.textContent = /-keep$/.test(o.code) ? "keep" : o.code.slice(id.length);
+      btn.addEventListener("click", function () {
+        choose(o.code);
+        if (cards[o.code]) cards[o.code].scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+      });
+      g.appendChild(btn);
+    });
+    groups.appendChild(g);
+  });
+
+  document.getElementById("legend").textContent = issues.map(function (id) {
+    return id + "  " + labels[id] + "\n" + options[id].map(function (o) {
+      return "    " + o.code + "  " + o.name;
+    }).join("\n");
+  }).join("\n");
+
+  function choose(code) {
+    var id = issueOf(code);
+    if (state.picks[id] === code) delete state.picks[id]; else state.picks[id] = code;
+    save();
+    render();
+  }
+
+  function answerLine() {
+    return issues.filter(function (id) { return state.picks[id]; })
+      .map(function (id) { return state.picks[id]; }).join("  ");
+  }
+
+  function fullAnswer() {
+    var out = answerLine();
+    var notes = issues.filter(function (id) { return state.notes[id] && state.notes[id].trim(); })
+      .map(function (id) { return id + " (" + labels[id] + "): " + state.notes[id].trim().replace(/\s*\n\s*/g, " / "); });
+    if (notes.length) out += "\n\n" + notes.join("\n");
+    return out;
+  }
+
+  function render() {
+    Object.keys(cards).forEach(function (code) {
+      cards[code].classList.toggle("picked", state.picks[issueOf(code)] === code);
+    });
+    document.querySelectorAll("#groups button").forEach(function (btn) {
+      btn.classList.toggle("on", state.picks[issueOf(btn.dataset.code)] === btn.dataset.code);
+    });
+    var n = issues.filter(function (id) { return state.picks[id]; }).length;
+    document.getElementById("count").textContent = n + " / " + issues.length;
+    document.getElementById("line").value = answerLine();
+    document.getElementById("answer").value = fullAnswer();
+  }
+
+  function flash(msg) {
+    var t = document.getElementById("toast");
+    t.textContent = msg;
+    setTimeout(function () { t.textContent = ""; }, 2500);
+  }
+
+  function fallbackCopy() {
+    var ta = document.getElementById("answer");
+    ta.focus();
+    ta.select();
+    var ok = false;
+    try { ok = document.execCommand("copy"); } catch (e) {}
+    if (ok) flash("copied");
+    else { ta.scrollIntoView({ block: "center" }); flash("press ⌘C"); }
+  }
+
+  document.getElementById("copy").addEventListener("click", function () {
+    var text = fullAnswer();
+    if (!text) { flash("nothing picked"); return; }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { flash("copied"); }, fallbackCopy);
+    } else fallbackCopy();
+  });
+
+  document.getElementById("clear").addEventListener("click", function () {
+    state = { picks: {}, notes: {} };
+    document.querySelectorAll("textarea.notes").forEach(function (ta) { ta.value = ""; });
+    save();
+    render();
+  });
+
+  ["line", "answer"].forEach(function (id) {
+    document.getElementById(id).addEventListener("focus", function (ev) { ev.target.select(); });
+  });
+
+  render();
+
+  /* live demo: the composed cover toggle */
+  document.querySelectorAll('[data-demo="cover"]').forEach(function (mp) {
+    var toggle = function (ev) {
+      ev.stopPropagation();
+      mp.classList.remove("hovered");
+      mp.dataset.size = mp.dataset.size === "big" ? "small" : "big";
+    };
+    mp.querySelector(".corner").addEventListener("click", toggle);
+    mp.querySelector(".mini").addEventListener("click", toggle);
+  });
+})();
+</script>
+</body>
+</html>

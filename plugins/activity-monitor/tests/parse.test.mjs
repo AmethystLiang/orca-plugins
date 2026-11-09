@@ -11,6 +11,7 @@ import {
   parseGpu,
   parseDiskBytes,
   parsePs,
+  parseProcStat,
   coreLoads,
   coreLayout,
   rate
@@ -72,8 +73,22 @@ test('disk bytes add up across every block storage driver', () => {
 test('ps rows keep names with spaces, start times, and turn kilobytes into bytes', () => {
   const list = parsePs(fixture('ps.txt'))
   assert.equal(list.length, 6)
-  assert.deepEqual(list[4], { pid: 564, cpu: 0, mem: 1654784, name: 'Core Audio Driver (MSTeamsAudioDevice.driver)', start: 'Wed Nov 4 11:17:30 2026' })
-  assert.deepEqual(list[5], { pid: 960, cpu: 0.4, mem: 868352, name: 'redis-server 127.0.0.1:6379', start: 'Wed Nov 4 11:20:01 2026' })
+  assert.deepEqual(list[4], { pid: 564, ppid: 1, cpu: 0, mem: 1654784, name: 'Core Audio Driver (MSTeamsAudioDevice.driver)', start: 'Wed Nov 4 11:17:30 2026' })
+  assert.deepEqual(list[5], { pid: 960, ppid: 1, cpu: 0.4, mem: 868352, name: 'redis-server 127.0.0.1:6379', start: 'Wed Nov 4 11:20:01 2026' })
+})
+
+test('ps rows with a parent pid column keep it, and the old shape has none', () => {
+  const [row] = parsePs('  77     1   0.4  18224 Wed Nov  4 11:16:47 2026     launchd\n')
+  assert.equal(row.ppid, 1)
+  assert.equal(row.pid, 77)
+  assert.equal(row.cpu, 0.4)
+  assert.equal(row.mem, 18224 * 1024)
+  assert.equal(parsePs('  77 0.4 18224 Wed Nov  4 11:16:47 2026     launchd\n')[0].ppid, undefined)
+})
+
+test('parseProcStat reads the parent pid from field 4', () => {
+  assert.equal(parseProcStat('42 (Web Content (x)) R 1 42 42 0 -1 4194560 1 1 0 0 1000 500 0 0 20 0 1 0 777 170000000 25600 18446744073709551615').ppid, 1)
+  assert.equal(parseProcStat('42 (a) S 900 42 42 0 -1 4194560 1 1 0 0 1000 500 0 0 20 0 1 0 777 170000000 25600 18446744073709551615').ppid, 900)
 })
 
 test('numbers printed with a decimal comma still parse', () => {

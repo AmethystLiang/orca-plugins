@@ -24,20 +24,44 @@ The strip at the bottom of the panel shows one word on a five-step scale, with a
 
 The badge keeps the worker running while the sidebar is closed, so warnings still fire. It's hidden below Critical. Windows has no pressure or swap reading, so there it goes by memory percent alone.
 
+## Clean up
+
+The broom in the footer starts a cleanup. It launches your chosen agent (Claude, Codex or Grok, set in Settings) in the workspace you have focused, and hands it the list of suspect processes below. The agent checks each one and proposes a kill list with a reason per process. Nothing is quit until you approve it in the agent's terminal. It never touches Orca, its helpers, or agents still running in Orca.
+
+While it works the broom shows **Cleaning…**, then **Review** with a count when the agent has a list for you, then how many were quit. Click it at any point to jump to the agent's terminal.
+
+## Cleanup suspects
+
+The cleanup session gets a list of processes that look stale or runaway. The thresholds are conservative on purpose:
+
+- **Orphaned dev process**: `node`, `bun`, `deno`, `vite`, `tsc`, `esbuild`, `webpack`, `next`, `turbo`, `nodemon`, `tsx` or `python`, or a command line running `vite`, `next dev`, `webpack`, `tsc --watch` or `http.server`, whose parent is gone (parent PID 1) or whose working directory no longer exists.
+- **Orphaned agent**: `claude`, `codex`, `grok`, `gemini`, `cursor-agent`, `aider` or `opencode` (also when run through `node`) with a gone parent or working directory. An agent that still runs under Orca is never flagged, however long it has been idle.
+- **CPU hog**: 80% of a core or more, averaged over 5 minutes.
+- **Memory leak**: resident memory up at least 500 MB and at least 50% over 10 minutes.
+
+Hogs and leaks need about 5 and 10 minutes of samples. Orca and its helpers, system processes and the Activity Monitor worker are never flagged. Windows gives no parent PID, so agents are skipped there and dev processes are flagged only by a missing folder, CPU or memory.
+
 ## Settings
 
-- **Graphs**: style (Smooth or Pixel), color (Heat, or Theme to recolor everything, including the health strip, from your theme's primary color to its destructive color), history (1m, 5m or 15m), and refresh (a stepper from 100ms to 10s, also in the footer). Pixel draws every graph, bar and the health level blocks as braille dots. Fast refresh uses more CPU.
+- **Graphs**: style (Smooth or Pixel), line style (Line + fill, Line or Bars, for Smooth graphs), color (Heat, or Theme to recolor everything, including the health strip, from your theme's primary color to its destructive color), gridlines on or off, history (1m, 5m, 15m, 1h, 6h or 24h), time labels (Relative, like "5m ago", or Clock, like "14:05"), record in background (keeps long history filling while the panel is closed), and refresh (a stepper from 100ms to 10s, also in the footer). Pixel draws every graph, bar and the health level blocks as braille dots. Fast refresh uses more CPU.
+- **Cleanup**: open cleanup terminal (switch to the agent's terminal when a cleanup starts), and the cleanup agent (Claude, Codex or Grok).
 - **Health**: the health strip on or off (it still shows at Strained or Critical), and the memory alert on or off. The memory alert only hides the pop-up inside the panel; the macOS notification at Critical still appears.
 - **Processes**: default sort (CPU, Memory or Name), and pulse on change, which flashes numbers that jump.
 - **General**: what the panel opens on (Last, All or Processes), text size (Small, Default or Large), and table rows (Compact, Default or Comfortable).
 
 ## Permissions
 
-It runs as a trusted worker because it reads system counters and lists processes, so Orca asks you to approve it on install. It asks for three capabilities:
+It runs as a trusted worker because it reads system counters and lists processes, so Orca asks you to approve it on install. It asks for these capabilities:
 
 - **Show notifications** (`notifications:show`): sends the desktop notification when memory stays critical, so it reaches you when Orca is in the background.
-- **Read agents** (`agent:read`): lists your running agents so **What is this?** can pick one to ask.
-- **Send to terminals** (`terminal:send`): types the **What is this?** question into that agent's terminal. It only does this when you choose it.
+- **Read agents** (`agent:read`): lists your running agents so **What is this?** can pick one to ask, and so a cleanup can tell when its agent is working or waiting for you.
+- **Send to terminals** (`terminal:send`): types the **What is this?** question, or the cleanup request, into the agent's terminal. It only does this when you choose it.
+- **Read your workspace** (`workspace:read`): finds the workspace you have focused, so the cleanup agent starts there.
+- **Start agents** (`agent:launch`): starts the cleanup agent you picked in Settings when you click the broom.
+- **Read terminal output** (`terminal:read`): reads the cleanup agent's terminal to see its "Proposed: N" line and whether that terminal is still open.
+- **Own storage** (`storage:own`): saves your settings in the plugin's own storage folder.
+
+It also listens for one event, **agent status changes** (`agent.status.changed`), to know when the cleanup agent has started and when it is working, waiting or done.
 
 It makes no network connections and keeps its settings only in your copy of Orca.
 
